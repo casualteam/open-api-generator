@@ -1,0 +1,6 @@
+@(model: casualteam.openapigenerator.Model.Object)
+case class @model.id (
+    @for((f,i) <- model.fields.zipWithIndex) {
+      @f._1 @if(i < model.fields.size -1){,}
+    }
+)
