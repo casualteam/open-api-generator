@@ -1,6 +1,6 @@
 package casualteam.openapigenerator
 
-import io.swagger.v3.oas.models.media.{ ArraySchema, ObjectSchema, Schema, StringSchema }
+import io.swagger.v3.oas.models.media.{ ArraySchema, BooleanSchema, DateTimeSchema, IntegerSchema, ObjectSchema, Schema, StringSchema }
 
 import scala.jdk.CollectionConverters._
 
@@ -12,36 +12,51 @@ object Model {
     ref: scala.Predef.String) extends Model
 
   case class Object(
-    id: scala.Predef.String,
-    name: scala.Predef.String,
+    name: Option[scala.Predef.String],
     fields: Map[scala.Predef.String, Model]) extends Model
 
   case class String(
-    id: scala.Predef.String) extends Model
+    name: Option[scala.Predef.String]) extends Model
+
+  case class Integer(
+    name: Option[scala.Predef.String]) extends Model
+
+  case class DateTime(
+    name: Option[scala.Predef.String]) extends Model
+
+  case class Boolean(
+    name: Option[scala.Predef.String]) extends Model
 
   case class Array(
-    id: scala.Predef.String) extends Model
+    name: Option[scala.Predef.String],
+    itemModel: Model) extends Model
 
   def getModel(name: Option[scala.Predef.String], schema: Schema[_]): Model = {
     Option(schema.get$ref())
       .map(Model.Ref)
       .getOrElse {
-        val modelName = Option(schema.getName).orElse(name).getOrElse("_empty")
+        val modelName = Option(schema.getName).orElse(name)
         schema match {
           case s: ObjectSchema =>
             Object(
-              id = modelName,
               name = modelName,
               fields = Option(s.getProperties).map(_.asScala.view.mapValues(getModel(None, _)).toMap).getOrElse(Map.empty))
           case s: StringSchema =>
             String(
-              id = modelName)
+              name = modelName)
           case s: ArraySchema =>
             Array(
-              id = modelName)
-          case s =>
-            Ref(
-              ref = modelName)
+              name = modelName,
+              itemModel = getModel(None, s.getItems))
+          case s: IntegerSchema =>
+            Integer(
+              name = modelName)
+          case s: DateTimeSchema =>
+            DateTime(
+              name = modelName)
+          case s: BooleanSchema =>
+            Boolean(
+              name = modelName)
         }
       }
   }

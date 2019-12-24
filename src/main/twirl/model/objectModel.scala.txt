@@ -1,6 +1,6 @@
-@(model: casualteam.openapigenerator.Model.Object)
-case class @model.id (
+@(model: casualteam.openapigenerator.Model.Object, getModelType: casualteam.openapigenerator.Model => String )
+case class @getModelType(model) (
     @for((f,i) <- model.fields.zipWithIndex) {
-      @f._1 @if(i < model.fields.size -1){,}
+      @f._1 : @getModelType(f._2) @if(i < model.fields.size -1){,}
     }
 )
