@@ -1,0 +1,29 @@
+@(
+    operations: List[casualteam.openapigenerator.Operation],
+    getResponseType: casualteam.openapigenerator.Response => String
+ )
+
+trait Operations {
+    @for(operation <- operations) {
+        def @operation.name (): Future[Operations.@{operation.name}Response]
+    }
+}
+
+object Operations {
+    @for(operation <- operations) {
+        trait @{operation.name}Response
+        object @{operation.name}Response {
+            @for((statusCode,response) <- operation.responses.iterator) {
+                @if(statusCode == "default"){
+                    case class default (body: @getResponseType(response), code: Int ) extends @{operation.name}Response
+                } else if(List("1xx","2xx","3xx","4xx","5xx").contains(statusCode.toLowerCase)){
+                    case class `@statusCode` (body: @getResponseType(response), code: Int  ) extends @{operation.name}Response
+                } else {
+                    case class `@statusCode` (body: @getResponseType(response) ) extends @{operation.name}Response{
+                        val code: Int = @statusCode
+                    }
+                }
+            }
+        }
+    }
+}

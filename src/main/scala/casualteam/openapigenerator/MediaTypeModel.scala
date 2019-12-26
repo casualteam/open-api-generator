@@ -1,8 +1,5 @@
 package casualteam.openapigenerator
 
-import io.swagger.v3.oas.models.media.{ Content, MediaType }
-import scala.jdk.CollectionConverters._
-
 trait MediaTypeModel
 
 object MediaTypeModel {
@@ -13,26 +10,12 @@ object MediaTypeModel {
   case class ApplicationForm() extends MediaTypeModel
   case class MultipartForm() extends MediaTypeModel
 
-  def getMediaTypeModel(contentType: String, mediaType: MediaType): MediaTypeModel = {
-    contentType match {
-      case "application/json" =>
-        MediaTypeModel.ApplicationJson(
-          model = Model.getModel(None, mediaType.getSchema))
-      case "application/xml" =>
-        MediaTypeModel.ApplicationXml(
-          model = Model.getModel(None, mediaType.getSchema))
-      case "application/x-www-form-urlencoded" =>
-        ApplicationForm()
-      case "multipart/form-data" =>
-        MultipartForm()
+  def fold[T](mediaTypeModel: MediaTypeModel)(_1: ApplicationJson => T, _2: ApplicationXml => T, _3: ApplicationForm => T, _4: MultipartForm => T): T = {
+    mediaTypeModel match {
+      case m: ApplicationJson => _1(m)
+      case m: ApplicationXml => _2(m)
+      case m: ApplicationForm => _3(m)
+      case m: MultipartForm => _4(m)
     }
-  }
-
-  def getMediaTypeModels(content: Content): Map[String, MediaTypeModel] = {
-    content.asScala.iterator
-      .map {
-        case (key, value) =>
-          key -> getMediaTypeModel(key, value)
-      }.toMap
   }
 }

@@ -1,0 +1,4 @@
+@(model: casualteam.openapigenerator.Model.TypedMap, getModelType: casualteam.openapigenerator.Model => String )
+case class @getModelType(model) (
+    values: Map[String, @getModelType(model.valuesModel)]
+)

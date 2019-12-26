@@ -1,24 +1,20 @@
 package casualteam.openapigenerator
 
-import io.swagger.v3.oas.models.responses.ApiResponse
-
 trait Response
 
 object Response {
 
   case class BaseResponse(
+    name: EntityName,
     contentTypeModels: Map[String, MediaTypeModel]) extends Response
 
   case class Ref(
     ref: String) extends Response
 
-  def getResponses(apiResponse: ApiResponse): Response = {
-    Option(apiResponse.get$ref)
-      .map(Ref)
-      .getOrElse {
-        val contentTypeModels = MediaTypeModel.getMediaTypeModels(apiResponse.getContent)
-        BaseResponse(
-          contentTypeModels = contentTypeModels)
-      }
+  def fold[T](response: Response)(_1: BaseResponse => T, _2: Ref => T): T = {
+    response match {
+      case r: BaseResponse => _1(r)
+      case r: Ref => _2(r)
+    }
   }
 }
