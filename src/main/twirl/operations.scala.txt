@@ -1,27 +1,40 @@
 @(
     operations: List[casualteam.openapigenerator.Operation],
-    getResponseType: casualteam.openapigenerator.Response => String
+    getResponseType: casualteam.openapigenerator.Response => String,
+    getModelType: casualteam.openapigenerator.Model => String,
+    getRequestBodyName: casualteam.openapigenerator.RequestBody => String,
+    getRequestBodyType: casualteam.openapigenerator.RequestBody => String
  )
 
 trait Operations {
     @for(operation <- operations) {
-        def @operation.name (): Future[Operations.@{operation.name}Response]
+        def @operation.name (in: Operations.@{operation.name}Request): scala.concurrent.Future[Operations.@{operation.name}Response]
     }
 }
 
 object Operations {
     @for(operation <- operations) {
-        trait @{operation.name}Response
+
+        case class @{operation.name}Request(
+            @if(operation.requestBody.isDefined){
+                @getRequestBodyName(operation.requestBody.get) : @getRequestBodyType(operation.requestBody.get)@if(operation.parameters.nonEmpty){,}
+            }
+            @for((p,i) <- operation.parameters.zipWithIndex) {
+              `@{p.name}` : @getModelType(p.model) @if(i < operation.parameters.size -1){,}
+            }
+        )
+
+        sealed trait @{operation.name}Response{ def code:Int }
         object @{operation.name}Response {
             @for((statusCode,response) <- operation.responses.iterator) {
-                @if(statusCode == "default"){
-                    case class default (body: @getResponseType(response), code: Int ) extends @{operation.name}Response
-                } else if(List("1xx","2xx","3xx","4xx","5xx").contains(statusCode.toLowerCase)){
-                    case class `@statusCode` (body: @getResponseType(response), code: Int  ) extends @{operation.name}Response
-                } else {
+                @if(scala.util.Try(Integer.decode(statusCode)).isSuccess){
                     case class `@statusCode` (body: @getResponseType(response) ) extends @{operation.name}Response{
                         val code: Int = @statusCode
                     }
+                } else if(statusCode == "default"){
+                    case class default (body: @getResponseType(response), code: Int ) extends @{operation.name}Response
+                } else {
+                    case class `@statusCode` (body: @getResponseType(response), code: Int  ) extends @{operation.name}Response
                 }
             }
         }

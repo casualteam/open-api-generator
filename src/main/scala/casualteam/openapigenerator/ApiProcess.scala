@@ -15,15 +15,22 @@ trait ApiProcess {
   def appendComputedValue(name: EntityName, value: String): EntityName =
     name.fold(n => Left(n :+ value), n => Left(List(n, value)))
 
-  def getParameter(parameter: OpenApiParameter): Parameter = {
-    Option(parameter.get$ref).map(Parameter.Ref)
-      .getOrElse {
-        parameter.getIn match {
-          case "query" => Parameter.Query(parameter.getName)
-          case "path" => Parameter.Path(parameter.getName)
-          case "header" => Parameter.Header(parameter.getName)
-        }
+  def getParameter(componentParamenters: Map[String, OpenApiParameter], parameter: OpenApiParameter): Parameter = {
+    val (parameterName, actualParameter) = Option(parameter.get$ref)
+      .map { ref =>
+        val name = ref.split("/").last
+        (name, componentParamenters.getOrElse(name, throw new Exception(s"Parameter $name not found")))
       }
+      .getOrElse(parameter.getName, parameter)
+    val model = getModel(Left(List(parameterName)), actualParameter.getSchema)
+    actualParameter.getIn match {
+      case "query" =>
+        Parameter.Query(parameter.getName, model)
+      case "path" =>
+        Parameter.Path(parameter.getName, model)
+      case "header" =>
+        Parameter.Header(parameter.getName, model)
+    }
   }
 
   def getMediaTypeModel(name: EntityName, contentType: String, mediaType: MediaType): MediaTypeModel = {
@@ -53,6 +60,7 @@ trait ApiProcess {
   def getRequestBody(name: EntityName, requestBody: OpenApiRequestBody): RequestBody = {
     val contentTypeModels = Option(requestBody.getContent).map(getMediaTypeModels(name, _)).getOrElse(Map.empty)
     RequestBody(
+      name = name,
       required = requestBody.getRequired,
       contentTypeModels = contentTypeModels)
   }
@@ -68,10 +76,10 @@ trait ApiProcess {
       }
   }
 
-  def getOperation(method: String, operation: OpenApiOperation): Operation = {
+  def getOperation(method: String, componentParamenters: Map[String, OpenApiParameter], operation: OpenApiOperation): Operation = {
     val computedName = Left(List(operation.getOperationId))
     val requestBody = Option(operation.getRequestBody).map(getRequestBody(computedName, _))
-    val parameters = Option(operation.getParameters).map(_.asScala).getOrElse(Nil).map(getParameter).toList
+    val parameters = Option(operation.getParameters).map(_.asScala).getOrElse(Nil).map(getParameter(componentParamenters, _)).toList
     val responses = operation.getResponses.asScala.iterator
       .map {
         case (k, v) =>
@@ -139,17 +147,18 @@ trait ApiProcess {
         _ => None,
         _ => None)
     }
+    val componentParameters = Option(openAPI.getComponents).flatMap(c => Option(c.getParameters)).map(_.asScala.toMap).getOrElse(Map.empty)
     val operations = openAPI.getPaths.asScala.values
       .flatMap { path =>
         Seq(
-          Option(path.getDelete).map(getOperation("DELETE", _)),
-          Option(path.getGet).map(getOperation("GET", _)),
-          Option(path.getHead).map(getOperation("HEAD", _)),
-          Option(path.getOptions).map(getOperation("OPTIONS", _)),
-          Option(path.getPatch).map(getOperation("PATCH", _)),
-          Option(path.getPost).map(getOperation("POST", _)),
-          Option(path.getPut).map(getOperation("PUT", _)),
-          Option(path.getTrace).map(getOperation("TRACE", _))).flatten
+          Option(path.getDelete).map(getOperation("DELETE", componentParameters, _)),
+          Option(path.getGet).map(getOperation("GET", componentParameters, _)),
+          Option(path.getHead).map(getOperation("HEAD", componentParameters, _)),
+          Option(path.getOptions).map(getOperation("OPTIONS", componentParameters, _)),
+          Option(path.getPatch).map(getOperation("PATCH", componentParameters, _)),
+          Option(path.getPost).map(getOperation("POST", componentParameters, _)),
+          Option(path.getPut).map(getOperation("PUT", componentParameters, _)),
+          Option(path.getTrace).map(getOperation("TRACE", componentParameters, _))).flatten
       }
       .toList
     val componentModels = Option(openAPI.getComponents)

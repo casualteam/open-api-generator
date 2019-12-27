@@ -1,5 +1,7 @@
 package casualteam.openapigenerator
 
+import java.io.{ File, PrintWriter }
+
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.parser.OpenAPIV3Parser
 
@@ -38,6 +40,14 @@ object Main extends App with ApiProcess {
     }
   }
 
+  def getRequestBodyName(requestBody: RequestBody): String = {
+    requestBody.name.fold(toComputedName, identity)
+  }
+
+  def getRequestBodyType(requestBody: RequestBody): String = {
+    requestBody.name.fold(toComputedName, identity)
+  }
+
   def getMediaTypeModelType(mediaTypeModel: MediaTypeModel): String = {
     MediaTypeModel.fold(mediaTypeModel)(
       m => getModelType(m.model),
@@ -52,23 +62,24 @@ object Main extends App with ApiProcess {
   }
 
   val openAPI: OpenAPI = new OpenAPIV3Parser().read("https://petstore.swagger.io/v2/swagger.json")
+  val outPath = "target/out.scala"
   val (_models, _responses, _operations) = process(openAPI)
-  println("--- MODELS ---")
+  val writer = new PrintWriter(new File(outPath))
+
   _models
     .collect {
       case m: Model.Object => models.txt.objectModel(m, getModelType).toString
       case m: Model.TypedMap => models.txt.typedMapModel(m, getModelType).toString
     }
     .map(inOneLine)
-    .foreach(println)
-  println("--- RESPONSES ---")
+    .foreach(s => writer.write(s + "\n"))
   _responses
     .collect {
       case r: Response.BaseResponse => responses.txt.responseModel(r, getResponseType, getMediaTypeModelType).toString()
     }
     .map(inOneLine)
-    .foreach(println)
-  println("--- OPERATIONS ---")
-  println(cleanTemplate(txt.operations(_operations, getResponseType).toString))
+    .foreach(s => writer.write(s + "\n"))
+  writer.write(cleanTemplate(txt.operations(_operations, getResponseType, getModelType, getRequestBodyName, getRequestBodyType).toString))
   //operations    .flatMap(getDecoders)    .distinct    .map(inOneLine)    .foreach(println)
+  writer.close()
 }
