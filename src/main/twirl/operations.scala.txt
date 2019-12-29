@@ -17,7 +17,7 @@ object Operations {
 
         case class @{operation.name}Request(
             @if(operation.requestBody.isDefined){
-                @getRequestBodyName(operation.requestBody.get) : @getRequestBodyType(operation.requestBody.get)@if(operation.parameters.nonEmpty){,}
+                `@getRequestBodyName(operation.requestBody.get)` : @getRequestBodyType(operation.requestBody.get)@if(operation.parameters.nonEmpty){,}
             }
             @for((p,i) <- operation.parameters.zipWithIndex) {
               `@{p.name}` : @getModelType(p.model) @if(i < operation.parameters.size -1){,}
@@ -28,9 +28,7 @@ object Operations {
         object @{operation.name}Response {
             @for((statusCode,response) <- operation.responses.iterator) {
                 @if(scala.util.Try(Integer.decode(statusCode)).isSuccess){
-                    case class `@statusCode` (body: @getResponseType(response) ) extends @{operation.name}Response{
-                        val code: Int = @statusCode
-                    }
+                    case class `@statusCode` (body: @getResponseType(response) ) extends @{operation.name}Response{ val code: Int = @statusCode }
                 } else if(statusCode == "default"){
                     case class default (body: @getResponseType(response), code: Int ) extends @{operation.name}Response
                 } else {

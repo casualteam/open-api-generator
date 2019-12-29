@@ -1,0 +1,11 @@
+@(
+    requestBody: casualteam.openapigenerator.RequestBody,
+    getRequestBodyType: casualteam.openapigenerator.RequestBody => String,
+    getMediaTypeModelType: casualteam.openapigenerator.MediaTypeModel => String
+ )
+sealed trait @getRequestBodyType(requestBody)
+object @{getRequestBodyType(requestBody)} {
+    @for((contentType, mediaTypeModel) <- requestBody.contentTypeModels) {
+        case class `@{contentType}`(in: @getMediaTypeModelType(mediaTypeModel) ) extends @getRequestBodyType(requestBody)
+    }
+}

@@ -8,43 +8,33 @@ import io.swagger.v3.parser.OpenAPIV3Parser
 object Main extends App with ApiProcess {
   def inOneLine(s: String) = s.replaceAll("(\n|\r| )+", " ").trim
   def cleanTemplate(s: String) = s.replaceAll("( *(\n|\r))+", "\n").trim
-  def toComputedName(names: List[String]) = names.map(_.replaceAll("/|-|\\+", "")).mkString("")
+  def firstCapital(s:String) = s.headOption.map(h => h.toUpper + s.tail).getOrElse(s)
+  def toComputedName(names: List[String]) = names.flatMap(_.split("/|-|\\+")).map(firstCapital).mkString("")
 
   def getModelType(model: Model): String = {
-    model match {
-      case m: Model.Ref =>
-        m.ref.split("/").last
-      case m: Model.Object =>
-        m.name.fold(toComputedName, identity)
-      case m: Model.TypedMap =>
-        m.name.fold(toComputedName, identity)
-      case m: Model.String =>
-        m.name.fold(_ => "String", identity)
-      case m: Model.Integer =>
-        m.name.fold(_ => "Int", identity)
-      case m: Model.DateTime =>
-        m.name.fold(_ => "java.time.Instant", identity)
-      case m: Model.Boolean =>
-        m.name.fold(_ => "Boolean", identity)
-      case m: Model.Array =>
-        m.name.fold(_ => s"List[${getModelType(m.itemModel)}]", identity)
-    }
+    Model.fold(model)(
+      m => m.ref.split("/").last,
+      m => m.name.fold(toComputedName, identity),
+      m => m.name.fold(toComputedName, identity),
+      m => m.name.fold(toComputedName, identity),
+      m => m.name.fold(_ => "scala.Predef.String", identity),
+      m => m.name.fold(_ => "scala.Int", identity),
+      m => m.name.fold(_ => "java.time.Instant", identity),
+      m => m.name.fold(_ => "scala.Boolean", identity),
+      m => m.name.fold(_ => s"scala.List[${getModelType(m.itemModel)}]", identity),
+      m => m.name.fold(_ => s"scala.List[scala.Byte]", identity))
   }
 
   def getResponseType(response: Response): String = {
-    response match {
-      case r: Response.Ref =>
-        r.ref.split("/").last
-      case r: Response.BaseResponse =>
-        r.name.fold(toComputedName, identity)
-    }
-  }
-
-  def getRequestBodyName(requestBody: RequestBody): String = {
-    requestBody.name.fold(toComputedName, identity)
+    Response.fold(response)(
+      r => r.name.fold(toComputedName, identity),
+      r => r.ref.split("/").last)
   }
 
   def getRequestBodyType(requestBody: RequestBody): String = {
+    requestBody.name.fold(toComputedName, identity)
+  }
+  def getRequestBodyName(requestBody: RequestBody): String = {
     requestBody.name.fold(toComputedName, identity)
   }
 
@@ -52,8 +42,8 @@ object Main extends App with ApiProcess {
     MediaTypeModel.fold(mediaTypeModel)(
       m => getModelType(m.model),
       m => getModelType(m.model),
-      _ => "Form",
-      _ => "Multipart")
+      m => getModelType(m.model),
+      m => getModelType(m.model))
   }
 
   def getDecoders(op: Operation) = {
@@ -73,9 +63,12 @@ object Main extends App with ApiProcess {
     }
     .map(inOneLine)
     .foreach(s => writer.write(s + "\n"))
+  _operations.flatMap(_.requestBody)
+    .map(requestBody => cleanTemplate(requests.txt.requestBody(requestBody, getRequestBodyType, getMediaTypeModelType).toString))
+    .foreach(s => writer.write(s + "\n"))
   _responses
     .collect {
-      case r: Response.BaseResponse => responses.txt.responseModel(r, getResponseType, getMediaTypeModelType).toString()
+      case r: Response.BaseResponse => responses.txt.response(r, getResponseType, getMediaTypeModelType).toString
     }
     .map(inOneLine)
     .foreach(s => writer.write(s + "\n"))

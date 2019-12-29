@@ -22,7 +22,7 @@ trait ApiProcess {
         (name, componentParamenters.getOrElse(name, throw new Exception(s"Parameter $name not found")))
       }
       .getOrElse(parameter.getName, parameter)
-    val model = getModel(Left(List(parameterName)), actualParameter.getSchema)
+    val model = getModel(List(parameterName), None, actualParameter.getSchema)
     actualParameter.getIn match {
       case "query" =>
         Parameter.Query(parameter.getName, model)
@@ -33,58 +33,52 @@ trait ApiProcess {
     }
   }
 
-  def getMediaTypeModel(name: EntityName, contentType: String, mediaType: MediaType): MediaTypeModel = {
-    val defaultModelName = appendComputedValue(name, contentType)
-    contentType match {
-      case "application/json" =>
-        MediaTypeModel.ApplicationJson(
-          model = getModel(defaultModelName, mediaType.getSchema))
-      case "application/xml" =>
-        MediaTypeModel.ApplicationXml(
-          model = getModel(defaultModelName, mediaType.getSchema))
-      case "application/x-www-form-urlencoded" =>
-        ApplicationForm()
-      case "multipart/form-data" =>
-        MultipartForm()
-    }
-  }
-
-  def getMediaTypeModels(name: EntityName, content: Content): Map[String, MediaTypeModel] = {
+  def getMediaTypeModels(computedName: List[String], content: Content): Map[String, MediaTypeModel] = {
     content.asScala.iterator
       .map {
         case (contentType, mediaType) =>
-          contentType -> getMediaTypeModel(name, contentType, mediaType)
+          val newComputeName = computedName :+ contentType
+          val mediaTypeModel = contentType match {
+            case "application/json" =>
+              MediaTypeModel.ApplicationJson(model = getModel(newComputeName, None, mediaType.getSchema))
+            case "application/xml" =>
+              MediaTypeModel.ApplicationXml(model = getModel(newComputeName, None, mediaType.getSchema))
+            case "application/x-www-form-urlencoded" =>
+              ApplicationForm(model = getModel(newComputeName, None, mediaType.getSchema))
+            case "multipart/form-data" =>
+              MultipartForm(model = getModel(newComputeName, None, mediaType.getSchema))
+          }
+          contentType -> mediaTypeModel
       }.toMap
   }
 
-  def getRequestBody(name: EntityName, requestBody: OpenApiRequestBody): RequestBody = {
-    val contentTypeModels = Option(requestBody.getContent).map(getMediaTypeModels(name, _)).getOrElse(Map.empty)
+  def getRequestBody(computedName: List[String], requestBody: OpenApiRequestBody): RequestBody = {
+    val contentTypeModels = Option(requestBody.getContent).map(getMediaTypeModels(computedName, _)).getOrElse(Map.empty)
     RequestBody(
-      name = name,
+      name = Left(computedName),
       required = requestBody.getRequired,
       contentTypeModels = contentTypeModels)
   }
 
-  def getResponse(name: EntityName, apiResponse: ApiResponse): Response = {
+  def getResponse(computedName: List[String], name: Option[String], apiResponse: ApiResponse): Response = {
     Option(apiResponse.get$ref)
       .map(Response.Ref)
       .getOrElse {
-        val contentTypeModels = getMediaTypeModels(name, apiResponse.getContent)
+        val contentTypeModels = getMediaTypeModels(computedName, apiResponse.getContent)
         Response.BaseResponse(
-          name = name,
+          name = name.map(Right(_)).getOrElse(Left(computedName)),
           contentTypeModels = contentTypeModels)
       }
   }
 
   def getOperation(method: String, componentParamenters: Map[String, OpenApiParameter], operation: OpenApiOperation): Operation = {
-    val computedName = Left(List(operation.getOperationId))
+    val computedName = List(operation.getOperationId)
     val requestBody = Option(operation.getRequestBody).map(getRequestBody(computedName, _))
     val parameters = Option(operation.getParameters).map(_.asScala).getOrElse(Nil).map(getParameter(componentParamenters, _)).toList
     val responses = operation.getResponses.asScala.iterator
       .map {
         case (k, v) =>
-          val entityName = appendComputedValue(computedName, k)
-          k -> getResponse(entityName, v)
+          k -> getResponse(computedName :+ k, None, v)
       }
       .toMap
     Operation(
@@ -95,26 +89,19 @@ trait ApiProcess {
       responses = responses)
   }
 
-  def getModel(defaultName: EntityName, schema: Schema[_]): Model = {
+  def getModel(computedName: List[String], name: Option[String], schema: Schema[_]): Model = {
     Option(schema.get$ref())
       .map(Model.Ref)
       .getOrElse {
-        val modelName = Option(schema.getName).map(Right(_)).getOrElse(defaultName)
+        val modelName = name.map(Right(_)).getOrElse(Left(computedName))
         schema match {
-          case s: ObjectSchema =>
-            val fields = Option(s.getProperties).map(_.asScala).getOrElse(Nil)
-              .map { case (k, v) => k -> getModel(appendComputedValue(modelName, k), v) }
-              .toMap
-            Model.Object(
-              name = modelName,
-              fields = fields)
           case s: StringSchema =>
             Model.String(
               name = modelName)
           case s: ArraySchema =>
             Model.Array(
               name = modelName,
-              itemModel = getModel(appendComputedValue(modelName, "Item"), s.getItems))
+              itemModel = getModel(computedName :+ "Item", None, s.getItems))
           case s: IntegerSchema =>
             Model.Integer(
               name = modelName)
@@ -124,17 +111,27 @@ trait ApiProcess {
           case s: BooleanSchema =>
             Model.Boolean(
               name = modelName)
+          case s: FileSchema if s.getFormat == "binary" =>
+            Model.File(
+              name = modelName)
           case s: MapSchema =>
             s.getAdditionalProperties match {
               case true =>
                 Model.FreeMap(
                   name = modelName)
               case getAdditionalPropertiesSchema: Schema[_] =>
-                val model = getModel(appendComputedValue(modelName, "Values"), getAdditionalPropertiesSchema)
+                val model = getModel(computedName :+ "Values", None, getAdditionalPropertiesSchema)
                 Model.TypedMap(
                   name = modelName,
                   valuesModel = model)
             }
+          case s =>
+            val fields = Option(s.getProperties).map(_.asScala).getOrElse(Nil)
+              .map { case (k, v) => k -> getModel(computedName :+ k, None, v) }
+              .toMap
+            Model.Object(
+              name = modelName,
+              fields = fields)
         }
       }
   }
@@ -144,8 +141,22 @@ trait ApiProcess {
       MediaTypeModel.fold(mediaTypeModel)(
         m => Some(m.model),
         m => Some(m.model),
-        _ => None,
-        _ => None)
+        m => Some(m.model),
+        m => Some(m.model))
+    }
+    def expandModel(model: Model): List[Model] = {
+      val additionalModels = Model.fold(model)(
+        m => Nil,
+        m => m.fields.values.flatMap(expandModel).toList,
+        m => expandModel(m.valuesModel),
+        m => Nil,
+        m => Nil,
+        m => Nil,
+        m => Nil,
+        m => Nil,
+        m => Nil,
+        m => Nil)
+      model :: additionalModels
     }
     val componentParameters = Option(openAPI.getComponents).flatMap(c => Option(c.getParameters)).map(_.asScala.toMap).getOrElse(Map.empty)
     val operations = openAPI.getPaths.asScala.values
@@ -165,7 +176,7 @@ trait ApiProcess {
       .flatMap(c => Option(c.getSchemas))
       .map(_.asScala.iterator)
       .getOrElse(Iterator.empty)
-      .map { case (k, v) => getModel(Right(k), v) }
+      .map { case (k, v) => getModel(Nil, Some(k), v) }
       .toList
       .distinct
     val operationModels = operations.flatMap { op =>
@@ -181,12 +192,13 @@ trait ApiProcess {
       .flatMap(c => Option(c.getResponses))
       .map(_.asScala.iterator)
       .getOrElse(Iterator.empty)
-      .map { case (k, v) => getResponse(Right(k), v) }
+      .map { case (k, v) => getResponse(Nil, Some(k), v) }
       .toList
       .distinct
     val operationResponses = operations.flatMap(_.responses.values)
 
-    (componentModels ++ operationModels, componentResponses ++ operationResponses, operations)
+    val allModels = (componentModels ++ operationModels).flatMap(expandModel).distinct
+    (allModels, componentResponses ++ operationResponses, operations)
   }
 
 }
