@@ -1,12 +1,12 @@
 package casualteam.openapigenerator
 
-import casualteam.openapigenerator.MediaTypeModel.{ApplicationForm, MultipartForm, OctetStream}
+import casualteam.openapigenerator.MediaTypeModel.{ ApplicationForm, MultipartForm, OctetStream }
 import casualteam.openapigenerator.Response.BaseResponse
 import io.swagger.v3.oas.models.media._
-import io.swagger.v3.oas.models.parameters.{RequestBody => OpenApiRequestBody}
+import io.swagger.v3.oas.models.parameters.{ RequestBody => OpenApiRequestBody }
 import io.swagger.v3.oas.models.responses.ApiResponse
-import io.swagger.v3.oas.models.{OpenAPI, Operation => OpenApiOperation}
-import io.swagger.v3.oas.models.parameters.{Parameter => OpenApiParameter}
+import io.swagger.v3.oas.models.{ OpenAPI, Operation => OpenApiOperation }
+import io.swagger.v3.oas.models.parameters.{ Parameter => OpenApiParameter }
 
 import scala.jdk.CollectionConverters._
 
@@ -56,12 +56,17 @@ trait ApiProcess {
       }.toMap
   }
 
-  def getRequestBody(computedName: List[String], requestBody: OpenApiRequestBody): RequestBody = {
-    val contentTypeModels = Option(requestBody.getContent).map(getMediaTypeModels(computedName, _)).getOrElse(Map.empty)
-    RequestBody(
-      name = Left(computedName),
-      required = requestBody.getRequired,
-      contentTypeModels = contentTypeModels)
+  def getRequestBody(computedName: List[String], name: Option[String], requestBody: OpenApiRequestBody): RequestBody = {
+    Option(requestBody.get$ref())
+      .map(RequestBody.Ref)
+      .getOrElse {
+        val contentTypeModels = Option(requestBody.getContent).map(getMediaTypeModels(computedName, _)).getOrElse(Map.empty)
+        val basicName = name.map(Right(_)).getOrElse(Left(computedName))
+        RequestBody.Basic(
+          name = basicName,
+          required = requestBody.getRequired,
+          contentTypeModels = contentTypeModels)
+      }
   }
 
   def getResponse(computedName: List[String], name: Option[String], apiResponse: ApiResponse): Response = {
@@ -77,10 +82,10 @@ trait ApiProcess {
 
   def getOperation(method: String, componentParamenters: Map[String, OpenApiParameter], operation: OpenApiOperation): Operation = {
     val computedName = List(operation.getOperationId)
-    val requestBody = Option(operation.getRequestBody).map(getRequestBody(computedName, _))
+    val requestBody = Option(operation.getRequestBody).map(getRequestBody(computedName, None, _))
     val parameters = Option(operation.getParameters).map(_.asScala).getOrElse(Nil).map(getParameter(componentParamenters, _)).toList
     val responses = operation.getResponses.asScala.iterator
-      .map {        case (k, v) =>          k -> getResponse(computedName :+ k, None, v)      }
+      .map { case (k, v) => k -> getResponse(computedName :+ k, None, v) }
       .toMap
     Operation(
       method = method,
@@ -140,7 +145,7 @@ trait ApiProcess {
       }
   }
 
-  def process(openAPI: OpenAPI): (List[Model], List[Response], List[Operation]) = {
+  def process(openAPI: OpenAPI): (List[Model], List[Response], List[RequestBody.Basic], List[Operation]) = {
     def getModels(mediaTypeModel: MediaTypeModel) = {
       MediaTypeModel.fold(mediaTypeModel)(
         m => Some(m.model),
@@ -163,6 +168,8 @@ trait ApiProcess {
         m => Nil)
       model :: additionalModels
     }
+
+    //operations
     val componentParameters = Option(openAPI.getComponents).flatMap(c => Option(c.getParameters)).map(_.asScala.toMap).getOrElse(Map.empty)
     val operations = openAPI.getPaths.asScala.values
       .flatMap { path =>
@@ -177,6 +184,8 @@ trait ApiProcess {
           Option(path.getTrace).map(getOperation("TRACE", componentParameters, _))).flatten
       }
       .toList
+
+    //models
     val componentModels = Option(openAPI.getComponents)
       .flatMap(c => Option(c.getSchemas))
       .map(_.asScala.iterator)
@@ -188,11 +197,14 @@ trait ApiProcess {
       val modelsFromResponses = op.responses.values
         .collect { case m: BaseResponse => m.contentTypeModels.values.flatMap(getModels) }
         .flatten
-      val modelsFromRequests = op.requestBody.toList
-        .flatMap(_.contentTypeModels.values)
+      val modelsFromRequests = op.requestBody
+        .map(RequestBody.fold(_)(basic => basic.contentTypeModels.values, ref => Nil))
+        .toList.flatten
         .flatMap(getModels)
       modelsFromResponses ++ modelsFromRequests
     }
+
+    //responses
     val componentResponses = Option(openAPI.getComponents)
       .flatMap(c => Option(c.getResponses))
       .map(_.asScala.iterator)
@@ -202,8 +214,21 @@ trait ApiProcess {
       .distinct
     val operationResponses = operations.flatMap(_.responses.values)
 
+    //requestBody
+    val componentRequestBodies = Option(openAPI.getComponents)
+      .flatMap(c => Option(c.getRequestBodies))
+      .map(_.asScala.iterator)
+      .getOrElse(Iterator.empty)
+      .map { case (k, v) => getRequestBody(Nil, Some(k), v) }
+      .toList
+      .distinct
+    val operationRequestBodies = operations.flatMap(_.requestBody)
+
     val allModels = (componentModels ++ operationModels).flatMap(expandModel).distinct
-    (allModels, componentResponses ++ operationResponses, operations)
+    val allResponses = (componentResponses ++ operationResponses).distinct
+    val allRequestBodies = (componentRequestBodies ++ operationRequestBodies).distinct
+      .collect { case r: RequestBody.Basic => r }
+    (allModels, allResponses, allRequestBodies, operations)
   }
 
 }

@@ -1,6 +1,6 @@
 @(
-    requestBody: casualteam.openapigenerator.RequestBody,
-    getRequestBodyType: casualteam.openapigenerator.RequestBody => String,
+    requestBody: casualteam.openapigenerator.RequestBody.Basic,
+    getRequestBodyType: casualteam.openapigenerator.RequestBody.Basic => String,
     getMediaTypeModelType: casualteam.openapigenerator.MediaTypeModel => String
  )
 sealed trait @getRequestBodyType(requestBody)
