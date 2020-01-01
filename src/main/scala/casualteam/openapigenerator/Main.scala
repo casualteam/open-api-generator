@@ -8,9 +8,10 @@ import io.swagger.v3.parser.OpenAPIV3Parser
 object Main extends App with ApiProcess {
   def inOneLine(s: String) = s.replaceAll("(\n|\r| )+", " ").trim
   def cleanTemplate(s: String) = s.replaceAll("( *(\n|\r))+", "\n").trim
-  def firstCharCapital(s: String) = s.headOption.map(h => h.toUpper + s.tail).getOrElse(s)
-  def toComputedType(names: List[String]) = names.flatMap(_.split("/|-|\\+")).map(firstCharCapital).mkString("")
-  def toComputedName(names: List[String]) = names.flatMap(_.split("/|-|\\+")).mkString("")
+  def firstCharUpper(s: String) = s.headOption.map(h => h.toUpper + s.tail).getOrElse(s)
+  def firstCharLower(s: String) = s.headOption.map(h => h.toLower + s.tail).getOrElse(s)
+  def toComputedType(names: List[String]) = firstCharUpper(names.flatMap(_.split("/|-|\\.|\\+")).map(firstCharUpper).mkString(""))
+  def toComputedName(names: List[String]) = firstCharLower(names.flatMap(_.split("/|-|\\.|\\+")).map(firstCharUpper).mkString(""))
 
   def getModelType(model: Model): String = {
     Model.fold(model)(
@@ -51,6 +52,9 @@ object Main extends App with ApiProcess {
       m => getModelType(m.model),
       m => getModelType(m.model))
   }
+  def getOperationName(op: Operation): String = {
+    toComputedName(List(op.name))
+  }
 
   def generateCode(apiPath: String, out: File): Unit = {
     val openAPI: OpenAPI = new OpenAPIV3Parser().read(apiPath)
@@ -73,7 +77,7 @@ object Main extends App with ApiProcess {
       }
       .map(inOneLine)
       .foreach(s => writer.write(s + "\n"))
-    writer.write(cleanTemplate(txt.operations(_operations, getResponseType, getModelType, getRequestBodyName, getRequestBodyType).toString))
+    writer.write(cleanTemplate(txt.operations(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyType).toString))
     writer.close()
   }
 

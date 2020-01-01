@@ -1,5 +1,6 @@
 @(
     operations: List[casualteam.openapigenerator.Operation],
+    getOperationName: casualteam.openapigenerator.Operation => String,
     getResponseType: casualteam.openapigenerator.Response => String,
     getModelType: casualteam.openapigenerator.Model => String,
     getRequestBodyName: casualteam.openapigenerator.RequestBody => String,
@@ -8,14 +9,14 @@
 
 trait Operations {
     @for(operation <- operations) {
-        def @operation.name (in: Operations.@{operation.name}Request): scala.concurrent.Future[Operations.@{operation.name}Response]
+        def @getOperationName(operation) (in: Operations.@getOperationName(operation)Request): scala.concurrent.Future[Operations.@getOperationName(operation)Response]
     }
 }
 
 object Operations {
     @for(operation <- operations) {
 
-        case class @{operation.name}Request(
+        case class @getOperationName(operation)Request(
             @if(operation.requestBody.isDefined){
                 `@getRequestBodyName(operation.requestBody.get)` : @getRequestBodyType(operation.requestBody.get)@if(operation.parameters.nonEmpty){,}
             }
@@ -24,15 +25,15 @@ object Operations {
             }
         )
 
-        sealed trait @{operation.name}Response{ def code:Int }
-        object @{operation.name}Response {
+        sealed trait @getOperationName(operation)Response{ def code:Int }
+        object @getOperationName(operation)Response {
             @for((statusCode,response) <- operation.responses.iterator) {
                 @if(scala.util.Try(Integer.decode(statusCode)).isSuccess){
-                    case class `@statusCode` (body: @getResponseType(response) ) extends @{operation.name}Response{ val code: Int = @statusCode }
+                    case class `@statusCode` (body: @getResponseType(response) ) extends @getOperationName(operation)Response{ val code: Int = @statusCode }
                 } else if(statusCode == "default"){
-                    case class default (body: @getResponseType(response), code: Int ) extends @{operation.name}Response
+                    case class default (body: @getResponseType(response), code: Int ) extends @getOperationName(operation)Response
                 } else {
-                    case class `@statusCode` (body: @getResponseType(response), code: Int  ) extends @{operation.name}Response
+                    case class `@statusCode` (body: @getResponseType(response), code: Int  ) extends @getOperationName(operation)Response
                 }
             }
         }
