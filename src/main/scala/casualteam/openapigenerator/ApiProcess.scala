@@ -1,12 +1,12 @@
 package casualteam.openapigenerator
 
-import casualteam.openapigenerator.MediaTypeModel.{ ApplicationForm, MultipartForm }
+import casualteam.openapigenerator.MediaTypeModel.{ApplicationForm, MultipartForm, OctetStream}
 import casualteam.openapigenerator.Response.BaseResponse
 import io.swagger.v3.oas.models.media._
-import io.swagger.v3.oas.models.parameters.{ RequestBody => OpenApiRequestBody }
+import io.swagger.v3.oas.models.parameters.{RequestBody => OpenApiRequestBody}
 import io.swagger.v3.oas.models.responses.ApiResponse
-import io.swagger.v3.oas.models.{ OpenAPI, Operation => OpenApiOperation }
-import io.swagger.v3.oas.models.parameters.{ Parameter => OpenApiParameter }
+import io.swagger.v3.oas.models.{OpenAPI, Operation => OpenApiOperation}
+import io.swagger.v3.oas.models.parameters.{Parameter => OpenApiParameter}
 
 import scala.jdk.CollectionConverters._
 
@@ -47,6 +47,10 @@ trait ApiProcess {
               ApplicationForm(model = getModel(newComputeName, None, mediaType.getSchema))
             case "multipart/form-data" =>
               MultipartForm(model = getModel(newComputeName, None, mediaType.getSchema))
+            case "application/octet-stream" =>
+              OctetStream(model = getModel(newComputeName, None, mediaType.getSchema))
+            case _ =>
+              throw new IllegalArgumentException(s"Unknown content type $contentType in content $content")
           }
           contentType -> mediaTypeModel
       }.toMap
@@ -64,7 +68,7 @@ trait ApiProcess {
     Option(apiResponse.get$ref)
       .map(Response.Ref)
       .getOrElse {
-        val contentTypeModels = getMediaTypeModels(computedName, apiResponse.getContent)
+        val contentTypeModels = Option(apiResponse.getContent).map(getMediaTypeModels(computedName, _)).getOrElse(Map.empty)
         Response.BaseResponse(
           name = name.map(Right(_)).getOrElse(Left(computedName)),
           contentTypeModels = contentTypeModels)
@@ -76,10 +80,7 @@ trait ApiProcess {
     val requestBody = Option(operation.getRequestBody).map(getRequestBody(computedName, _))
     val parameters = Option(operation.getParameters).map(_.asScala).getOrElse(Nil).map(getParameter(componentParamenters, _)).toList
     val responses = operation.getResponses.asScala.iterator
-      .map {
-        case (k, v) =>
-          k -> getResponse(computedName :+ k, None, v)
-      }
+      .map {        case (k, v) =>          k -> getResponse(computedName :+ k, None, v)      }
       .toMap
     Operation(
       method = method,
@@ -114,6 +115,9 @@ trait ApiProcess {
           case s: FileSchema if s.getFormat == "binary" =>
             Model.File(
               name = modelName)
+          case s: BinarySchema =>
+            Model.File(
+              name = modelName)
           case s: MapSchema =>
             s.getAdditionalProperties match {
               case true =>
@@ -139,6 +143,7 @@ trait ApiProcess {
   def process(openAPI: OpenAPI): (List[Model], List[Response], List[Operation]) = {
     def getModels(mediaTypeModel: MediaTypeModel) = {
       MediaTypeModel.fold(mediaTypeModel)(
+        m => Some(m.model),
         m => Some(m.model),
         m => Some(m.model),
         m => Some(m.model),

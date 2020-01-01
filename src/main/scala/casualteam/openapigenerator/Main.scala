@@ -1,6 +1,7 @@
 package casualteam.openapigenerator
 
-import java.io.{ File, PrintWriter }
+import java.io.{File, PrintWriter}
+import java.net.URL
 
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.parser.OpenAPIV3Parser
@@ -32,14 +33,15 @@ object Main extends App with ApiProcess {
   }
 
   def getRequestBodyType(requestBody: RequestBody): String = {
-    requestBody.name.fold(toComputedName, identity)
+    requestBody.name.fold(toComputedName, identity) + "Body"
   }
   def getRequestBodyName(requestBody: RequestBody): String = {
-    requestBody.name.fold(toComputedName, identity)
+    requestBody.name.fold(toComputedName, identity) + "Body"
   }
 
   def getMediaTypeModelType(mediaTypeModel: MediaTypeModel): String = {
     MediaTypeModel.fold(mediaTypeModel)(
+      m => getModelType(m.model),
       m => getModelType(m.model),
       m => getModelType(m.model),
       m => getModelType(m.model),
@@ -51,28 +53,32 @@ object Main extends App with ApiProcess {
       .flatMap(requestBody => requestBody.contentTypeModels.iterator.map { case (contentType, mediaTypeModel) => "decode " + contentType + " " + getMediaTypeModelType(mediaTypeModel) })
   }
 
-  val openAPI: OpenAPI = new OpenAPIV3Parser().read("https://petstore.swagger.io/v2/swagger.json")
-  val outPath = "target/out.scala"
-  val (_models, _responses, _operations) = process(openAPI)
-  val writer = new PrintWriter(new File(outPath))
+  def generateCode(apiPath: String, out: File) = {
+    val openAPI: OpenAPI = new OpenAPIV3Parser().read(apiPath)
+    val (_models, _responses, _operations) = process(openAPI)
+    val writer = new PrintWriter(out)
 
-  _models
-    .collect {
-      case m: Model.Object => models.txt.objectModel(m, getModelType).toString
-      case m: Model.TypedMap => models.txt.typedMapModel(m, getModelType).toString
-    }
-    .map(inOneLine)
-    .foreach(s => writer.write(s + "\n"))
-  _operations.flatMap(_.requestBody)
-    .map(requestBody => cleanTemplate(requests.txt.requestBody(requestBody, getRequestBodyType, getMediaTypeModelType).toString))
-    .foreach(s => writer.write(s + "\n"))
-  _responses
-    .collect {
-      case r: Response.BaseResponse => responses.txt.response(r, getResponseType, getMediaTypeModelType).toString
-    }
-    .map(inOneLine)
-    .foreach(s => writer.write(s + "\n"))
-  writer.write(cleanTemplate(txt.operations(_operations, getResponseType, getModelType, getRequestBodyName, getRequestBodyType).toString))
-  //operations    .flatMap(getDecoders)    .distinct    .map(inOneLine)    .foreach(println)
-  writer.close()
+    _models
+      .collect {
+        case m: Model.Object => models.txt.objectModel(m, getModelType).toString
+        case m: Model.TypedMap => models.txt.typedMapModel(m, getModelType).toString
+      }
+      .map(inOneLine)
+      .foreach(s => writer.write(s + "\n"))
+    _operations.flatMap(_.requestBody)
+      .map(requestBody => cleanTemplate(requests.txt.requestBody(requestBody, getRequestBodyType, getMediaTypeModelType).toString))
+      .foreach(s => writer.write(s + "\n"))
+    _responses
+      .collect {
+        case r: Response.BaseResponse => responses.txt.response(r, getResponseType, getMediaTypeModelType).toString
+      }
+      .map(inOneLine)
+      .foreach(s => writer.write(s + "\n"))
+    writer.write(cleanTemplate(txt.operations(_operations, getResponseType, getModelType, getRequestBodyName, getRequestBodyType).toString))
+    //operations    .flatMap(getDecoders)    .distinct    .map(inOneLine)    .foreach(println)
+    writer.close()
+  }
+
+  generateCode("src/main/resources/example-api-v3.yaml",  new File("target/out2.scala"))
+  generateCode("https://petstore.swagger.io/v2/swagger.json",  new File("target/out1.scala"))
 }
