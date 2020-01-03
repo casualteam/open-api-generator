@@ -1,10 +1,15 @@
 @(
     response: casualteam.openapigenerator.Response.BaseResponse,
     getResponseType: casualteam.openapigenerator.Response => String,
-    getMediaTypeModelType: casualteam.openapigenerator.MediaTypeModel => String
+    getMediaTypeModelType: casualteam.openapigenerator.MediaTypeModel => String,
+    getHeaderType: casualteam.openapigenerator.Header => String
  )
 case class @getResponseType(response) (
     @for((f,i) <- response.contentTypeModels.iterator.zipWithIndex) {
       `@f._1` : @getMediaTypeModelType(f._2) @if(i < response.contentTypeModels.size -1){,}
+    }
+    @if(response.contentTypeModels.nonEmpty && response.headers.nonEmpty){,}
+    @for((f,i) <- response.headers.iterator.zipWithIndex) {
+      `@f._1` : @getHeaderType(f._2) @if(i < response.headers.size -1){,}
     }
 )

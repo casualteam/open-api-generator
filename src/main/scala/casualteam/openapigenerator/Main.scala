@@ -4,10 +4,13 @@ import java.io.{ File, PrintWriter }
 
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.parser.OpenAPIV3Parser
+import io.swagger.v3.parser.core.models.ParseOptions
+
+import scala.jdk.CollectionConverters._
 
 object Main extends App with ApiProcess {
-  def inOneLine(s: String) = s.replaceAll("(\n|\r| )+", " ").trim
-  def cleanTemplate(s: String) = s.replaceAll("( *(\n|\r))+", "\n").trim
+  case class A(a: String)(b: Int)
+
   def firstCharUpper(s: String) = s.headOption.map(h => h.toUpper + s.tail).getOrElse(s)
   def firstCharLower(s: String) = s.headOption.map(h => h.toLower + s.tail).getOrElse(s)
   def toComputedType(names: List[String]) = firstCharUpper(names.flatMap(_.split("/|-|\\.|\\+")).map(firstCharUpper).mkString(""))
@@ -52,32 +55,51 @@ object Main extends App with ApiProcess {
       m => getModelType(m.model),
       m => getModelType(m.model))
   }
+
+  def getHeaderType(header: Header): String = {
+    getModelType(header.model)
+  }
+
   def getOperationName(op: Operation): String = {
     toComputedName(List(op.name))
   }
 
   def generateCode(apiPath: String, out: File): Unit = {
-    val openAPI: OpenAPI = new OpenAPIV3Parser().read(apiPath)
+    def inOneLine(s: Any) = s.toString.replaceAll("(\n|\r| )+", " ").trim
+    def cleanTemplate(s: Any) = s.toString.replaceAll("( *(\n|\r))+", "\n").trim
+
+    val parseOptions = {
+      val p = new ParseOptions()
+      p.setResolve(false)
+      p.setResolveFully(false)
+      p
+    }
+    val openAPI: OpenAPI = new OpenAPIV3Parser().read(apiPath, Nil.asJava, parseOptions)
     val (_models, _responses, _requestBodies, _operations) = process(openAPI)
     val writer = new PrintWriter(out)
+    def writeln(s: Any) = writer.write(s.toString + "\n")
 
+    writeln("//models")
     _models
       .collect {
-        case m: Model.Object => models.txt.objectModel(m, getModelType).toString
-        case m: Model.TypedMap => models.txt.typedMapModel(m, getModelType).toString
+        case m: Model.Object => models.txt.objectModel(m, getModelType)
+        case m: Model.TypedMap => models.txt.typedMapModel(m, getModelType)
       }
       .map(inOneLine)
-      .foreach(s => writer.write(s + "\n"))
+      .foreach(writeln)
+    writeln("//request bodies")
     _requestBodies
       .map(requestBody => requests.txt.requestBody(requestBody, getRequestBodyType, getMediaTypeModelType))
-      .foreach(s => writer.write(cleanTemplate(s.toString) + "\n"))
+      .foreach(s => writeln(cleanTemplate(s)))
+    writeln("//responses")
     _responses
       .collect {
-        case r: Response.BaseResponse => responses.txt.response(r, getResponseType, getMediaTypeModelType).toString
+        case r: Response.BaseResponse => responses.txt.response(r, getResponseType, getMediaTypeModelType, getHeaderType)
       }
       .map(inOneLine)
-      .foreach(s => writer.write(s + "\n"))
-    writer.write(cleanTemplate(txt.operations(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyType).toString))
+      .foreach(writeln)
+    writeln("//operations")
+    writeln(cleanTemplate(txt.operations(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyType)))
     writer.close()
   }
 

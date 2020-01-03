@@ -6,6 +6,7 @@ object Response {
 
   case class BaseResponse(
     name: EntityName,
+    headers: Map[String, Header],
     contentTypeModels: Map[String, MediaTypeModel]) extends Response
 
   case class Ref(

@@ -2,11 +2,11 @@ package casualteam.openapigenerator
 
 import casualteam.openapigenerator.MediaTypeModel.{ ApplicationForm, MultipartForm, OctetStream }
 import casualteam.openapigenerator.Response.BaseResponse
+import io.swagger.v3.oas.models.headers.{ Header => OpenApiHeader }
 import io.swagger.v3.oas.models.media._
-import io.swagger.v3.oas.models.parameters.{ RequestBody => OpenApiRequestBody }
+import io.swagger.v3.oas.models.parameters.{ Parameter => OpenApiParameter, RequestBody => OpenApiRequestBody }
 import io.swagger.v3.oas.models.responses.ApiResponse
 import io.swagger.v3.oas.models.{ OpenAPI, Operation => OpenApiOperation }
-import io.swagger.v3.oas.models.parameters.{ Parameter => OpenApiParameter }
 
 import scala.jdk.CollectionConverters._
 
@@ -69,23 +69,39 @@ trait ApiProcess {
       }
   }
 
-  def getResponse(computedName: List[String], name: Option[String], apiResponse: ApiResponse): Response = {
+  def getHeader(componentHeaders: Map[String, OpenApiHeader], computedName: List[String], header: OpenApiHeader): Header = {
+    val actualHeader = Option(header.get$ref)
+      .map { ref =>
+        val name = ref.split("/").last
+        componentHeaders.getOrElse(name, throw new Exception(s"Header $name not found"))
+      }
+      .getOrElse(header)
+    Header(
+      model = getModel(computedName :+ "header", None, actualHeader.getSchema))
+  }
+
+  def getResponse(componentHeaders: Map[String, OpenApiHeader], computedName: List[String], name: Option[String], apiResponse: ApiResponse): Response = {
     Option(apiResponse.get$ref)
       .map(Response.Ref)
       .getOrElse {
         val contentTypeModels = Option(apiResponse.getContent).map(getMediaTypeModels(computedName, _)).getOrElse(Map.empty)
+        val headers = Option(apiResponse.getHeaders).map(_.asScala)
+          .getOrElse(Nil)
+          .map { case (k, v) => k -> getHeader(componentHeaders, computedName :+ k, v) }
+          .toMap
         Response.BaseResponse(
           name = name.map(Right(_)).getOrElse(Left(computedName)),
+          headers = headers,
           contentTypeModels = contentTypeModels)
       }
   }
 
-  def getOperation(method: String, componentParamenters: Map[String, OpenApiParameter], operation: OpenApiOperation): Operation = {
+  def getOperation(method: String, componentParamenters: Map[String, OpenApiParameter], componentHeaders: Map[String, OpenApiHeader], operation: OpenApiOperation): Operation = {
     val computedName = List(operation.getOperationId)
     val requestBody = Option(operation.getRequestBody).map(getRequestBody(computedName, None, _))
     val parameters = Option(operation.getParameters).map(_.asScala).getOrElse(Nil).map(getParameter(componentParamenters, _)).toList
     val responses = operation.getResponses.asScala.iterator
-      .map { case (k, v) => k -> getResponse(computedName :+ k, None, v) }
+      .map { case (k, v) => k -> getResponse(componentHeaders, computedName :+ k, None, v) }
       .toMap
     Operation(
       method = method,
@@ -154,6 +170,7 @@ trait ApiProcess {
         m => Some(m.model),
         m => Some(m.model))
     }
+
     def expandModel(model: Model): List[Model] = {
       val additionalModels = Model.fold(model)(
         m => Nil,
@@ -171,17 +188,18 @@ trait ApiProcess {
 
     //operations
     val componentParameters = Option(openAPI.getComponents).flatMap(c => Option(c.getParameters)).map(_.asScala.toMap).getOrElse(Map.empty)
+    val componentHeaders = Option(openAPI.getComponents).flatMap(c => Option(c.getHeaders)).map(_.asScala.toMap).getOrElse(Map.empty)
     val operations = openAPI.getPaths.asScala.values
       .flatMap { path =>
         Seq(
-          Option(path.getDelete).map(getOperation("DELETE", componentParameters, _)),
-          Option(path.getGet).map(getOperation("GET", componentParameters, _)),
-          Option(path.getHead).map(getOperation("HEAD", componentParameters, _)),
-          Option(path.getOptions).map(getOperation("OPTIONS", componentParameters, _)),
-          Option(path.getPatch).map(getOperation("PATCH", componentParameters, _)),
-          Option(path.getPost).map(getOperation("POST", componentParameters, _)),
-          Option(path.getPut).map(getOperation("PUT", componentParameters, _)),
-          Option(path.getTrace).map(getOperation("TRACE", componentParameters, _))).flatten
+          Option(path.getDelete).map(getOperation("DELETE", componentParameters, componentHeaders, _)),
+          Option(path.getGet).map(getOperation("GET", componentParameters, componentHeaders, _)),
+          Option(path.getHead).map(getOperation("HEAD", componentParameters, componentHeaders, _)),
+          Option(path.getOptions).map(getOperation("OPTIONS", componentParameters, componentHeaders, _)),
+          Option(path.getPatch).map(getOperation("PATCH", componentParameters, componentHeaders, _)),
+          Option(path.getPost).map(getOperation("POST", componentParameters, componentHeaders, _)),
+          Option(path.getPut).map(getOperation("PUT", componentParameters, componentHeaders, _)),
+          Option(path.getTrace).map(getOperation("TRACE", componentParameters, componentHeaders, _))).flatten
       }
       .toList
 
@@ -195,7 +213,7 @@ trait ApiProcess {
       .distinct
     val operationModels = operations.flatMap { op =>
       val modelsFromResponses = op.responses.values
-        .collect { case m: BaseResponse => m.contentTypeModels.values.flatMap(getModels) }
+        .collect { case m: BaseResponse => m.contentTypeModels.values.flatMap(getModels) ++ m.headers.values.map(_.model) }
         .flatten
       val modelsFromRequests = op.requestBody
         .map(RequestBody.fold(_)(basic => basic.contentTypeModels.values, ref => Nil))
@@ -209,7 +227,7 @@ trait ApiProcess {
       .flatMap(c => Option(c.getResponses))
       .map(_.asScala.iterator)
       .getOrElse(Iterator.empty)
-      .map { case (k, v) => getResponse(Nil, Some(k), v) }
+      .map { case (k, v) => getResponse(componentHeaders, Nil, Some(k), v) }
       .toList
       .distinct
     val operationResponses = operations.flatMap(_.responses.values)

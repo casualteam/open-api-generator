@@ -90,18 +90,7 @@ paths:
               default: available
       responses:
         '200':
-          description: successful operation
-          content:
-            application/xml:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Pet'
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Pet'
+          $ref: '#/components/responses/PetList'
         '400':
           description: Invalid status value
       security:
@@ -129,18 +118,7 @@ paths:
               type: string
       responses:
         '200':
-          description: successful operation
-          content:
-            application/xml:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Pet'
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Pet'
+          $ref: '#/components/responses/PetList'
         '400':
           description: Invalid tag value
       security:
@@ -165,14 +143,7 @@ paths:
             format: int64
       responses:
         '200':
-          description: successful operation
-          content:
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/Pet'
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Pet'
+          $ref: '#/components/responses/Pet'
         '400':
           description: Invalid ID supplied
         '404':
@@ -301,14 +272,7 @@ paths:
       operationId: placeOrder
       responses:
         '200':
-          description: successful operation
-          content:
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/Order'
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Order'
+          $ref: '#/components/responses/Order'
         '400':
           description: Invalid Order
       requestBody:
@@ -340,14 +304,7 @@ paths:
             maximum: 10
       responses:
         '200':
-          description: successful operation
-          content:
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/Order'
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Order'
+          $ref: '#/components/responses/Order'
         '400':
           description: Invalid ID supplied
         '404':
@@ -489,14 +446,7 @@ paths:
             type: string
       responses:
         '200':
-          description: successful operation
-          content:
-            application/xml:
-              schema:
-                $ref: '#/components/schemas/User'
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
+          $ref: '#/components/responses/User'
         '400':
           description: Invalid username supplied
         '404':
@@ -667,6 +617,47 @@ components:
           type: string
         message:
           type: string
+  responses:
+    Pet:
+      description: successful operation
+      content:
+        application/xml:
+          schema:
+            $ref: '#/components/schemas/Pet'
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Pet'
+    PetList:
+      description: successful operation
+      content:
+        application/xml:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Pet'
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Pet'
+    Order:
+      description: successful operation
+      content:
+        application/xml:
+          schema:
+            $ref: '#/components/schemas/Order'
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Order'
+    User:
+      description: successful operation
+      content:
+        application/xml:
+          schema:
+            $ref: '#/components/schemas/User'
+        application/json:
+          schema:
+            $ref: '#/components/schemas/User'
   requestBodies:
     Pet:
       content:
