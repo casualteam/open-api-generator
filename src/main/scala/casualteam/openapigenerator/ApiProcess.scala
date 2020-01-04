@@ -25,11 +25,11 @@ trait ApiProcess {
     val model = getModel(List(parameterName), None, actualParameter.getSchema)
     actualParameter.getIn match {
       case "query" =>
-        Parameter.Query(parameter.getName, model)
+        Parameter.Query(parameter.getName, model, actualParameter.getRequired)
       case "path" =>
-        Parameter.Path(parameter.getName, model)
+        Parameter.Path(parameter.getName, model, actualParameter.getRequired)
       case "header" =>
-        Parameter.Header(parameter.getName, model)
+        Parameter.Header(parameter.getName, model, actualParameter.getRequired)
     }
   }
 
@@ -77,7 +77,8 @@ trait ApiProcess {
       }
       .getOrElse(header)
     Header(
-      model = getModel(computedName :+ "header", None, actualHeader.getSchema))
+      model = getModel(computedName :+ "header", None, actualHeader.getSchema),
+      required = actualHeader.getRequired)
   }
 
   def getResponse(componentHeaders: Map[String, OpenApiHeader], computedName: List[String], name: Option[String], apiResponse: ApiResponse): Response = {
@@ -152,7 +153,13 @@ trait ApiProcess {
             }
           case s =>
             val fields = Option(s.getProperties).map(_.asScala).getOrElse(Nil)
-              .map { case (k, v) => k -> getModel(computedName :+ k, None, v) }
+              .map {
+                case (fieldName, fieldSchema) =>
+                  val objectField = ObjectField(
+                    model = getModel(computedName :+ fieldName, None, fieldSchema),
+                    required = Option(fieldSchema.getRequired).exists(_.asScala.contains(fieldName)))
+                  fieldName -> objectField
+              }
               .toMap
             Model.Object(
               name = modelName,
@@ -174,7 +181,7 @@ trait ApiProcess {
     def expandModel(model: Model): List[Model] = {
       val additionalModels = Model.fold(model)(
         m => Nil,
-        m => m.fields.values.flatMap(expandModel).toList,
+        m => m.fields.values.map(_.model).flatMap(expandModel).toList,
         m => expandModel(m.valuesModel),
         m => Nil,
         m => Nil,

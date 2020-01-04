@@ -2,14 +2,15 @@
     operations: List[casualteam.openapigenerator.Operation],
     getOperationName: casualteam.openapigenerator.Operation => String,
     getResponseType: casualteam.openapigenerator.Response => String,
-    getModelType: casualteam.openapigenerator.Model => String,
+    getModelType: (casualteam.openapigenerator.Model, Boolean) => String,
     getRequestBodyName: casualteam.openapigenerator.RequestBody => String,
-    getRequestBodyType: casualteam.openapigenerator.RequestBody => String
+    getRequestBodyTypeParam: casualteam.openapigenerator.RequestBody => String
  )
 
 trait Operations {
+    import Operations._
     @for(operation <- operations) {
-        def @getOperationName(operation) (in: Operations.@getOperationName(operation)Request): scala.concurrent.Future[Operations.@getOperationName(operation)Response]
+        def @getOperationName(operation) (in: @getOperationName(operation)Request): scala.concurrent.Future[@getOperationName(operation)Response]
     }
 }
 
@@ -18,10 +19,10 @@ object Operations {
 
         case class @getOperationName(operation)Request(
             @if(operation.requestBody.isDefined){
-                `@getRequestBodyName(operation.requestBody.get)` : @getRequestBodyType(operation.requestBody.get)@if(operation.parameters.nonEmpty){,}
+                `@getRequestBodyName(operation.requestBody.get)` : @getRequestBodyTypeParam(operation.requestBody.get)@if(operation.parameters.nonEmpty){,}
             }
             @for((p,i) <- operation.parameters.zipWithIndex) {
-              `@{p.name}` : @getModelType(p.model) @if(i < operation.parameters.size -1){,}
+              `@{p.name}` : @getModelType(p.model,p.required) @if(i < operation.parameters.size -1){,}
             }
         )
 

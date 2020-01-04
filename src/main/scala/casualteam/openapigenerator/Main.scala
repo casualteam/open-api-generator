@@ -16,18 +16,24 @@ object Main extends App with ApiProcess {
   def toComputedType(names: List[String]) = firstCharUpper(names.flatMap(_.split("/|-|\\.|\\+")).map(firstCharUpper).mkString(""))
   def toComputedName(names: List[String]) = firstCharLower(names.flatMap(_.split("/|-|\\.|\\+")).map(firstCharUpper).mkString(""))
 
-  def getModelType(model: Model): String = {
-    Model.fold(model)(
+  def withOption(string: String, required: Boolean) = {
+    if (required) string
+    else s"Option[$string]"
+  }
+
+  def getModelType(model: Model, required: Boolean): String = {
+    val modelType = Model.fold(model)(
       m => m.ref.split("/").last,
       m => m.name.fold(toComputedType, identity),
       m => m.name.fold(toComputedType, identity),
       m => m.name.fold(toComputedType, identity),
-      m => m.name.fold(_ => "scala.Predef.String", identity),
-      m => m.name.fold(_ => "scala.Int", identity),
+      m => m.name.fold(_ => "Predef.String", identity),
+      m => m.name.fold(_ => "Int", identity),
       m => m.name.fold(_ => "java.time.Instant", identity),
-      m => m.name.fold(_ => "scala.Boolean", identity),
-      m => m.name.fold(_ => s"scala.List[${getModelType(m.itemModel)}]", identity),
-      m => m.name.fold(_ => s"scala.List[scala.Byte]", identity))
+      m => m.name.fold(_ => "Boolean", identity),
+      m => m.name.fold(_ => s"List[${getModelType(m.itemModel, true)}]", identity),
+      m => m.name.fold(_ => s"List[scala.Byte]", identity))
+    withOption(modelType, required)
   }
 
   def getResponseType(response: Response): String = {
@@ -41,28 +47,37 @@ object Main extends App with ApiProcess {
       basic => basic.name.fold(toComputedType, identity),
       ref => ref.ref.split("/").last)
   }
+
+  def getRequestBodyTypeParam(requestBodies: List[RequestBody])(requestBody: RequestBody): String = {
+    val actualBodyType = RequestBody.fold(requestBody)(
+      basic => basic,
+      ref => {
+        requestBodies.collectFirst {
+          case basic: RequestBody.Basic if basic.name.fold(identity, identity) == ref.ref.split("/").last => basic
+        }.get
+      })
+    withOption(getRequestBodyType(actualBodyType), actualBodyType.required)
+  }
   def getRequestBodyName(requestBody: RequestBody): String = {
     RequestBody.fold(requestBody)(
       basic => basic.name.fold(toComputedName, identity),
-      ref => ref.ref.split("/").last)
+      ref => firstCharLower(ref.ref.split("/").last))
   }
 
   def getMediaTypeModelType(mediaTypeModel: MediaTypeModel): String = {
     MediaTypeModel.fold(mediaTypeModel)(
-      m => getModelType(m.model),
-      m => getModelType(m.model),
-      m => getModelType(m.model),
-      m => getModelType(m.model),
-      m => getModelType(m.model))
+      m => getModelType(m.model, true),
+      m => getModelType(m.model, true),
+      m => getModelType(m.model, true),
+      m => getModelType(m.model, true),
+      m => getModelType(m.model, true))
   }
 
-  def getHeaderType(header: Header): String = {
-    getModelType(header.model)
-  }
+  def getHeaderType(header: Header): String =
+    getModelType(header.model, header.required)
 
-  def getOperationName(op: Operation): String = {
+  def getOperationName(op: Operation): String =
     toComputedName(List(op.name))
-  }
 
   def generateCode(apiPath: String, out: File): Unit = {
     def inOneLine(s: Any) = s.toString.replaceAll("(\n|\r| )+", " ").trim
@@ -83,7 +98,7 @@ object Main extends App with ApiProcess {
     _models
       .collect {
         case m: Model.Object => models.txt.objectModel(m, getModelType)
-        case m: Model.TypedMap => models.txt.typedMapModel(m, getModelType)
+        case m: Model.TypedMap => models.txt.typedMapModel(m, getModelType(_, true))
       }
       .map(inOneLine)
       .foreach(writeln)
@@ -99,7 +114,7 @@ object Main extends App with ApiProcess {
       .map(inOneLine)
       .foreach(writeln)
     writeln("//operations")
-    writeln(cleanTemplate(txt.operations(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyType)))
+    writeln(cleanTemplate(txt.operations(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyTypeParam(_requestBodies))))
     writer.close()
   }
 

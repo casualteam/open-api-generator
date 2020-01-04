@@ -9,7 +9,7 @@ object Model {
 
   case class Object(
     name: EntityName,
-    fields: Map[scala.Predef.String, Model]) extends Model
+    fields: Map[scala.Predef.String, ObjectField]) extends Model
 
   case class TypedMap(
     name: EntityName,
