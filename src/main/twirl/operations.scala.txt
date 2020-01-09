@@ -30,11 +30,11 @@ object Operations {
         object @getOperationName(operation)Response {
             @for((statusCode,response) <- operation.responses.iterator) {
                 @if(scala.util.Try(Integer.decode(statusCode)).isSuccess){
-                    case class `@statusCode` (body: @getResponseType(response) ) extends @getOperationName(operation)Response{ val code: Int = @statusCode }
+                    case class `@statusCode` (in: @getResponseType(response) ) extends @getOperationName(operation)Response{ val code: Int = @statusCode }
                 } else if(statusCode == "default"){
-                    case class default (body: @getResponseType(response), code: Int ) extends @getOperationName(operation)Response
+                    case class default (in: @getResponseType(response), code: Int ) extends @getOperationName(operation)Response
                 } else {
-                    case class `@statusCode` (body: @getResponseType(response), code: Int  ) extends @getOperationName(operation)Response
+                    case class `@statusCode` (in: @getResponseType(response), code: Int  ) extends @getOperationName(operation)Response
                 }
             }
         }
