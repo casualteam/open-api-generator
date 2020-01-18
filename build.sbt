@@ -10,7 +10,7 @@ lazy val root = (project in file("."))
   .settings(
     name := "open-api-generator",
     libraryDependencies ++= Seq(
-      swaggerParser,
+      swaggerParser, betterFiles,
       scalaTest % Test
     ),
     unmanagedSourceDirectories in Compile += (baseDirectory( _ / "src"/ "main" / "twirl" )).value,
