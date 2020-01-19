@@ -97,16 +97,28 @@ trait ApiProcess {
       }
   }
 
-  def getOperation(method: String, componentParamenters: Map[String, OpenApiParameter], componentHeaders: Map[String, OpenApiHeader], operation: OpenApiOperation): Operation = {
+  def getOperation(method: String, path: String, componentParamenters: Map[String, OpenApiParameter], componentHeaders: Map[String, OpenApiHeader], operation: OpenApiOperation): Operation = {
     val computedName = List(operation.getOperationId)
     val requestBody = Option(operation.getRequestBody).map(getRequestBody(computedName, None, _))
     val parameters = Option(operation.getParameters).map(_.asScala).getOrElse(Nil).map(getParameter(componentParamenters, _)).toList
     val responses = operation.getResponses.asScala.iterator
       .map { case (k, v) => k -> getResponse(componentHeaders, computedName :+ k, None, v) }
       .toMap
+    val pathParams = parameters.collect { case p: Parameter.Path => p }
+    val queryParams = parameters.collect { case p: Parameter.Query => p }
+    val headerParams = parameters.collect { case p: Parameter.Header => p }
+    val typedPath = path.split("/").filter(_.nonEmpty).toList
+      .map {
+        case s"{$paramName}" =>
+          Right(pathParams.find(_.name == paramName).get)
+        case resource =>
+          Left(resource)
+      }
     Operation(
       method = method,
-      parameters = parameters,
+      path = typedPath,
+      queryParameters = queryParams,
+      headerParameters = headerParams,
       name = operation.getOperationId,
       requestBody = requestBody,
       responses = responses)
@@ -196,17 +208,18 @@ trait ApiProcess {
     //operations
     val componentParameters = Option(openAPI.getComponents).flatMap(c => Option(c.getParameters)).map(_.asScala.toMap).getOrElse(Map.empty)
     val componentHeaders = Option(openAPI.getComponents).flatMap(c => Option(c.getHeaders)).map(_.asScala.toMap).getOrElse(Map.empty)
-    val operations = openAPI.getPaths.asScala.values
-      .flatMap { path =>
-        Seq(
-          Option(path.getDelete).map(getOperation("DELETE", componentParameters, componentHeaders, _)),
-          Option(path.getGet).map(getOperation("GET", componentParameters, componentHeaders, _)),
-          Option(path.getHead).map(getOperation("HEAD", componentParameters, componentHeaders, _)),
-          Option(path.getOptions).map(getOperation("OPTIONS", componentParameters, componentHeaders, _)),
-          Option(path.getPatch).map(getOperation("PATCH", componentParameters, componentHeaders, _)),
-          Option(path.getPost).map(getOperation("POST", componentParameters, componentHeaders, _)),
-          Option(path.getPut).map(getOperation("PUT", componentParameters, componentHeaders, _)),
-          Option(path.getTrace).map(getOperation("TRACE", componentParameters, componentHeaders, _))).flatten
+    val operations = openAPI.getPaths.asScala.iterator
+      .flatMap {
+        case (path, item) =>
+          Seq(
+            Option(item.getDelete).map(getOperation("DELETE", path, componentParameters, componentHeaders, _)),
+            Option(item.getGet).map(getOperation("GET", path, componentParameters, componentHeaders, _)),
+            Option(item.getHead).map(getOperation("HEAD", path, componentParameters, componentHeaders, _)),
+            Option(item.getOptions).map(getOperation("OPTIONS", path, componentParameters, componentHeaders, _)),
+            Option(item.getPatch).map(getOperation("PATCH", path, componentParameters, componentHeaders, _)),
+            Option(item.getPost).map(getOperation("POST", path, componentParameters, componentHeaders, _)),
+            Option(item.getPut).map(getOperation("PUT", path, componentParameters, componentHeaders, _)),
+            Option(item.getTrace).map(getOperation("TRACE", path, componentParameters, componentHeaders, _))).flatten
       }
       .toList
 

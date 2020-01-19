@@ -17,14 +17,16 @@ trait Operations {
 object Operations {
     @for(operation <- operations) {
 
-        case class @getOperationName(operation)Request(
-            @if(operation.requestBody.isDefined){
-                `@getRequestBodyName(operation.requestBody.get)` : @getRequestBodyTypeParam(operation.requestBody.get)@if(operation.parameters.nonEmpty){,}
-            }
-            @for((p,i) <- operation.parameters.zipWithIndex) {
-              `@{p.name}` : @getModelType(p.model,p.required) @if(i < operation.parameters.size -1){,}
-            }
-        )
+        @defining(operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters){ parameters =>
+            case class @getOperationName(operation)Request(
+                @if(operation.requestBody.isDefined){
+                    @getRequestBodyName(operation.requestBody.get) : @getRequestBodyTypeParam(operation.requestBody.get)@if(parameters.nonEmpty){,}
+                }
+                @for((p,i) <- parameters.zipWithIndex) {
+                  @{p.name} : @getModelType(p.model,p.required) @if(i < parameters.size -1){,}
+                }
+            )
+        }
 
         sealed trait @getOperationName(operation)Response{ def code:Int }
         object @getOperationName(operation)Response {

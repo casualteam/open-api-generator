@@ -30,6 +30,20 @@ object Main extends App with ApiProcess {
     withOption(modelType, required)
   }
 
+  def getPathParamMatcher(pathParam: Parameter.Path): String = {
+    Model.fold(pathParam.model)(
+      m => ???,
+      m => ???,
+      m => ???,
+      m => ???,
+      m => m.name.fold(_ => "Segment", identity),
+      m => m.name.fold(_ => "IntNumber", identity),
+      m => ???,
+      m => ???,
+      m => ???,
+      m => ???)
+  }
+
   def getResponseType(response: Response): String = {
     Response.fold(response)(
       r => r.name.fold(toComputedType, identity),
@@ -108,6 +122,8 @@ object Main extends App with ApiProcess {
       .foreach(codeFile.appendLine)
     codeFile.appendLine("//operations")
     codeFile.appendLine(cleanTemplate(operation.txt.interface(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyTypeParam(_requestBodies))))
+    codeFile.appendLine("//operation impl")
+    codeFile.appendLine(cleanTemplate(txt.requestHandler(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyTypeParam(_requestBodies))))
   }
 
   def generate(config: Config): Unit = {
