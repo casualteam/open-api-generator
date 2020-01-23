@@ -49,26 +49,21 @@ object OperationImpl {
                 }
 
                 @for(parameter <- operation.queryParameters){
-                    parameters('@{parameter.name})@("{") @{parameter.name} =>
+                    parameters('@{parameter.name}.?)@("{") @{parameter.name} =>
                 }
                 @for(parameter <- operation.headerParameters){
-                    @if(parameter.required){
-                        headerValueByName('@{parameter.name})@("{") @{parameter.name} =>
-                    }else{
-                        optionalHeaderValueByName('@{parameter.name})@("{") @{parameter.name} =>
-                    }
-                }
-                @if(operation.requestBody.isDefined){
-                    entity(as[@getRequestBodyTypeParam(operation.requestBody.get)])@("{") @getRequestBodyName(operation.requestBody.get) =>
+                    optionalHeaderValueByName('@{parameter.name})@("{") @{parameter.name} =>
                 }
 
-                @{operation.method.toLowerCase} {
+                @{operation.method.toLowerCase} { ctx =>
+                    @if(operation.requestBody.isDefined){
+                        val @getRequestBodyName(operation.requestBody.get) = ctx.request.entity //@getRequestBodyTypeParam(operation.requestBody.get)
+                    }
                     @operationHandling(operation)
                 }
 
                 @for(_ <- operation.queryParameters){@("}")}
                 @for(_ <- operation.headerParameters){@("}")}
-                @if(operation.requestBody.isDefined){@("}")}
             }
     }
 }
