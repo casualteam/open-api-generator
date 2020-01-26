@@ -30,7 +30,7 @@ object Main extends App with ApiProcess {
     withOption(modelType, required)
   }
 
-  def getPathParamMatcher(pathParam: Parameter.Path): String = {
+  def getPathParamMatcher(pathParam: Parameter): String = {
     Model.fold(pathParam.model)(
       m => ???,
       m => ???,
@@ -50,10 +50,24 @@ object Main extends App with ApiProcess {
       r => r.ref.split("/").last)
   }
 
-  def getRequestBodyType(requestBody: RequestBody): String = {
+  def getActualResponse(responses: List[Response])(response: Response): Response.BaseResponse = {
+    Response.fold(response)(
+      base => base,
+      ref => {
+        responses.collectFirst {
+          case basic: Response.BaseResponse if basic.name.fold(identity, identity) == ref.ref.split("/").last => basic
+        }.get
+      })
+  }
+
+  def getActualRequestBody(requestBodies: List[RequestBody])(requestBody: RequestBody): RequestBody.Basic = {
     RequestBody.fold(requestBody)(
-      basic => basic.name.fold(toComputedType, identity),
-      ref => ref.ref.split("/").last)
+      base => base,
+      ref => {
+        requestBodies.collectFirst {
+          case basic: RequestBody.Basic if basic.name.fold(identity, identity) == ref.ref.split("/").last => basic
+        }.get
+      })
   }
 
   def getRequestBodyTypeParam(requestBodies: List[RequestBody])(requestBody: RequestBody): String = {
@@ -66,6 +80,13 @@ object Main extends App with ApiProcess {
       })
     withOption(getRequestBodyType(actualBodyType), actualBodyType.required)
   }
+
+  def getRequestBodyType(requestBody: RequestBody): String = {
+    RequestBody.fold(requestBody)(
+      basic => basic.name.fold(toComputedType, identity),
+      ref => ref.ref.split("/").last)
+  }
+
   def getRequestBodyName(requestBody: RequestBody): String = {
     RequestBody.fold(requestBody)(
       basic => basic.name.fold(toComputedName, identity),
@@ -81,6 +102,24 @@ object Main extends App with ApiProcess {
       m => getModelType(m.model, true))
   }
 
+  def getMediaTypeModelEncoder(mediaTypeModel: MediaTypeModel): String = {
+    MediaTypeModel.fold(mediaTypeModel)(
+      _ => "encodeJson",
+      _ => "encodeXml",
+      _ => ???,
+      _ => ???,
+      _ => ???)
+  }
+
+  def getMediaTypeModelDecoder(mediaTypeModel: MediaTypeModel, required: Boolean): String = {
+    MediaTypeModel.fold(mediaTypeModel)(
+      m => s"decodeJson[${getModelType(m.model, required)}]",
+      m => s"decodeXml[${getModelType(m.model, required)}]",
+      m => s"decodeXml[${getModelType(m.model, required)}]",
+      m => s"decodeXml[${getModelType(m.model, required)}]",
+      m => s"decodeXml[${getModelType(m.model, required)}]")
+  }
+
   def getHeaderType(header: Header): String =
     getModelType(header.model, header.required)
 
@@ -89,7 +128,9 @@ object Main extends App with ApiProcess {
 
   def generateCode(apiPath: String, directory: File): Unit = {
     def inOneLine(s: Any) = s.toString.replaceAll("(\n|\r| )+", " ").trim
-    def cleanTemplate(s: Any) = s.toString.replaceAll("( *(\n|\r))+", "\n").trim
+    def cleanTemplate(s: Any) = {
+      s.toString.replaceAll("(^(\n|\r) *)+|( *(\n|\r))+", "\n").trim
+    }
 
     val parseOptions = {
       val p = new ParseOptions()
@@ -120,10 +161,28 @@ object Main extends App with ApiProcess {
       }
       .map(inOneLine)
       .foreach(codeFile.appendLine)
+    codeFile.appendLine("//model handlers")
+    codeFile.appendLine(cleanTemplate(txt.error()))
+    _operations
+      .flatMap(o => o.path.flatMap(_.toOption) ++ o.headerParameters ++ o.queryParameters)
+      .distinct
+      .map(p => cleanTemplate(handlers.txt.parameter(p, getModelType)))
+      .foreach(codeFile.appendLine)
+    codeFile.appendLine(cleanTemplate(handlers.json.txt.handler(_models, getModelType)))
+    codeFile.appendLine(cleanTemplate(handlers.xml.txt.handler(_models, getModelType)))
     codeFile.appendLine("//operations")
     codeFile.appendLine(cleanTemplate(operation.txt.interface(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyTypeParam(_requestBodies))))
     codeFile.appendLine("//operation impl")
-    codeFile.appendLine(cleanTemplate(txt.requestHandler(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyTypeParam(_requestBodies))))
+    codeFile.appendLine(cleanTemplate(txt.requestHandler(
+      _operations,
+      getOperationName,
+      getActualResponse(_responses),
+      getModelType,
+      getRequestBodyName,
+      getRequestBodyType,
+      getMediaTypeModelEncoder,
+      getMediaTypeModelDecoder,
+      getActualRequestBody(_requestBodies))))
   }
 
   def generate(config: Config): Unit = {

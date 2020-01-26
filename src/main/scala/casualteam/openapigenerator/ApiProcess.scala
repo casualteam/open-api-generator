@@ -15,24 +15,6 @@ trait ApiProcess {
   def appendComputedValue(name: EntityName, value: String): EntityName =
     name.fold(n => Left(n :+ value), n => Left(List(n, value)))
 
-  def getParameter(componentParamenters: Map[String, OpenApiParameter], parameter: OpenApiParameter): Parameter = {
-    val (parameterName, actualParameter) = Option(parameter.get$ref)
-      .map { ref =>
-        val name = ref.split("/").last
-        (name, componentParamenters.getOrElse(name, throw new Exception(s"Parameter $name not found")))
-      }
-      .getOrElse(parameter.getName, parameter)
-    val model = getModel(List(parameterName), None, actualParameter.getSchema)
-    actualParameter.getIn match {
-      case "query" =>
-        Parameter.Query(parameter.getName, model, actualParameter.getRequired)
-      case "path" =>
-        Parameter.Path(parameter.getName, model, actualParameter.getRequired)
-      case "header" =>
-        Parameter.Header(parameter.getName, model, actualParameter.getRequired)
-    }
-  }
-
   def getMediaTypeModels(computedName: List[String], content: Content): Map[String, MediaTypeModel] = {
     content.asScala.iterator
       .map {
@@ -98,30 +80,47 @@ trait ApiProcess {
   }
 
   def getOperation(method: String, path: String, componentParamenters: Map[String, OpenApiParameter], componentHeaders: Map[String, OpenApiHeader], operation: OpenApiOperation): Operation = {
+    def getParameter(componentParamenters: Map[String, OpenApiParameter], parameter: OpenApiParameter) = {
+      val (parameterName, actualParameter) = Option(parameter.get$ref)
+        .map { ref =>
+          val name = ref.split("/").last
+          (name, componentParamenters.getOrElse(name, throw new Exception(s"Parameter $name not found")))
+        }
+        .getOrElse(parameter.getName, parameter)
+      val model = getModel(List(parameterName), None, actualParameter.getSchema)
+      actualParameter.getIn match {
+        case "query" =>
+          (Some(Parameter(parameter.getName, model, actualParameter.getRequired)), None, None)
+        case "path" =>
+          (None, Some(Parameter(parameter.getName, model, actualParameter.getRequired)), None)
+        case "header" =>
+          (None, None, Some(Parameter(parameter.getName, model, actualParameter.getRequired)))
+      }
+    }
+
     val computedName = List(operation.getOperationId)
     val requestBody = Option(operation.getRequestBody).map(getRequestBody(computedName, None, _))
-    val parameters = Option(operation.getParameters).map(_.asScala).getOrElse(Nil).map(getParameter(componentParamenters, _)).toList
+    val (queryParams, pathParams, headerParams) = Option(operation.getParameters).map(_.asScala).getOrElse(Nil)
+      .map(getParameter(componentParamenters, _)).toList.unzip3
     val responses = operation.getResponses.asScala.iterator
       .map { case (k, v) => k -> getResponse(componentHeaders, computedName :+ k, None, v) }
       .toMap
-    val pathParams = parameters.collect { case p: Parameter.Path => p }
-    val queryParams = parameters.collect { case p: Parameter.Query => p }
-    val headerParams = parameters.collect { case p: Parameter.Header => p }
     val typedPath = path.split("/").filter(_.nonEmpty).toList
       .map {
         case s"{$paramName}" =>
-          Right(pathParams.find(_.name == paramName).get)
+          Right(pathParams.flatten.find(_.name == paramName).get)
         case resource =>
           Left(resource)
       }
     Operation(
       method = method,
       path = typedPath,
-      queryParameters = queryParams,
-      headerParameters = headerParams,
+      queryParameters = queryParams.flatten,
+      headerParameters = headerParams.flatten,
       name = operation.getOperationId,
       requestBody = requestBody,
-      responses = responses)
+      responses = responses,
+      hasInput = (queryParams ++ pathParams ++ headerParams).flatten.nonEmpty || requestBody.nonEmpty)
   }
 
   def getModel(computedName: List[String], name: Option[String], schema: Schema[_]): Model = {

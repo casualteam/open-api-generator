@@ -1,0 +1,38 @@
+@(
+    models: List[casualteam.openapigenerator.Model],
+    getModelType: (casualteam.openapigenerator.Model,Boolean) => String
+)
+
+trait ModelXmlEncode[A] { def encodeXml(a: A): Either[Error,akka.http.scaladsl.model.ResponseEntity] }
+object ModelXmlEncode {
+  def apply[A](implicit sh: ModelXmlEncode[A]): ModelXmlEncode[A] = sh
+
+  object ops {
+    def encodeXml[A: ModelXmlEncode](a: A) = ModelXmlEncode[A].encodeXml(a)
+    implicit class ModelXmlEncodeOps[A: ModelXmlEncode](a: A) {
+      def encodeXml = ModelXmlEncode[A].encodeXml(a)
+    }
+  }
+}
+
+trait ModelXmlDecode[A] { def decodeXml(a: akka.http.scaladsl.model.RequestEntity): Either[Error,A] }
+object ModelXmlDecode {
+  def apply[A](implicit sh: ModelXmlDecode[A]): ModelXmlDecode[A] = sh
+  object ops {
+    def decodeXml[A: ModelXmlDecode](a: akka.http.scaladsl.model.RequestEntity) = ModelXmlDecode[A].decodeXml(a)
+    implicit class ModelXmlDecodeOps(a: akka.http.scaladsl.model.RequestEntity) {
+      def decodeXml[A: ModelXmlDecode] = ModelXmlDecode[A].decodeXml(a)
+    }
+  }
+}
+
+object ModelXml{
+  @{models
+    .collect {
+      case m: casualteam.openapigenerator.Model.Object => handlers.xml.txt.objectModel(m, getModelType)
+      case m: casualteam.openapigenerator.Model.TypedMap => handlers.xml.txt.typedMapModel(m, getModelType(_, true))
+    }
+  }
+
+  @(handlers.xml.txt.primitiveTypes())
+}

@@ -1,0 +1,6 @@
+@(
+    model: casualteam.openapigenerator.Model.Object,
+    getModelType: (casualteam.openapigenerator.Model,Boolean) => String,
+    )
+implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelJsonEncode[@getModelType(model, true)] = ???
+implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelJsonDecode[@getModelType(model, true)] = ???

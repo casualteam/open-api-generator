@@ -1,0 +1,38 @@
+@(
+    models: List[casualteam.openapigenerator.Model],
+    getModelType: (casualteam.openapigenerator.Model,Boolean) => String
+)
+
+trait ModelJsonEncode[A] { def encodeJson(a: A): Either[Error,akka.http.scaladsl.model.ResponseEntity] }
+object ModelJsonEncode {
+  def apply[A](implicit sh: ModelJsonEncode[A]): ModelJsonEncode[A] = sh
+
+  object ops {
+    def encodeJson[A: ModelJsonEncode](a: A) = ModelJsonEncode[A].encodeJson(a)
+    implicit class ModelJsonEncodeOps[A: ModelJsonEncode](a: A) {
+      def encodeJson = ModelJsonEncode[A].encodeJson(a)
+    }
+  }
+}
+
+trait ModelJsonDecode[A] { def decodeJson(a: akka.http.scaladsl.model.RequestEntity): Either[Error,A] }
+object ModelJsonDecode {
+  def apply[A](implicit sh: ModelJsonDecode[A]): ModelJsonDecode[A] = sh
+  object ops {
+    def decodeJson[A: ModelJsonDecode](a: akka.http.scaladsl.model.RequestEntity) = ModelJsonDecode[A].decodeJson(a)
+    implicit class ModelJsonDecodeOps(a: akka.http.scaladsl.model.RequestEntity) {
+      def decodeJson[A: ModelJsonDecode] = ModelJsonDecode[A].decodeJson(a)
+    }
+  }
+}
+
+object ModelJson {
+  @{models
+    .collect {
+      case m: casualteam.openapigenerator.Model.Object => handlers.json.txt.objectModel(m, getModelType)
+      case m: casualteam.openapigenerator.Model.TypedMap => handlers.json.txt.typedMapModel(m, getModelType(_, true))
+    }
+  }
+
+  @(handlers.json.txt.primitiveTypes())
+}

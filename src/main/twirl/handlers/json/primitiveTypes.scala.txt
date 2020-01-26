@@ -1,0 +1,13 @@
+@()
+implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelJsonEncode[String] = ???
+implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelJsonEncode[Int] = ???
+implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelJsonEncode[java.time.Instant] = ???
+implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelJsonEncode[Boolean] = ???
+implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T:ModelJsonEncode]: ModelJsonEncode[List[T]] = ???
+implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T:ModelJsonEncode]: ModelJsonEncode[Option[T]] = ???
+implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelJsonDecode[String] = ???
+implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelJsonDecode[Int] = ???
+implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelJsonDecode[java.time.Instant] = ???
+implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelJsonDecode[Boolean] = ???
+implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T:ModelJsonDecode]: ModelJsonDecode[List[T]] = ???
+implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T:ModelJsonDecode]: ModelJsonDecode[Option[T]] = ???
