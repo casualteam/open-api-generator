@@ -13,6 +13,7 @@
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server._
+import akka.http.scaladsl._
 import ModelJsonEncode.ops._
 import ModelXmlEncode.ops._
 import ModelJsonDecode.ops._
@@ -72,7 +73,7 @@ import ModelXml._
     } else {
         val request = Right(Operations.@getOperationName(operation)Request())
     }
-    onSuccess(operationsImpl.@{getOperationName(operation)}(request)){ resp =>
+    onSuccess(operations.@{getOperationName(operation)}(request)){ resp =>
         val mediaTypeNegotiatorResponse = new MediaTypeNegotiator(ctx.request.headers)
         resp match {
             @for((statusCode,response) <- operation.responses.iterator) {
@@ -105,39 +106,49 @@ import ModelXml._
     }
 }
 
-object OperationImpl {
-    lazy val operationsImpl:Operations = ???
+object OperationHandler {
 
-    @for(operation <- operations){
-        lazy val @getOperationName(operation)Path =
-            path (
-                @{operation.path
-                    .map(_.fold(
-                        resource => "\"" + resource + "\"",
-                        pathParam => "Segment"
-                    ))
-                    .mkString{"/"}
-                }
-            ) {
-                @defining(operation.path.flatMap(_.right.toOption)){ pathParams =>
-                    @if(pathParams.nonEmpty){
-                        case (@{pathParams.map(_.name).mkString(",")}) =>
+    def getOperationHandler(
+        operations:Operations,
+        defaultResponse: RequestContext => HttpResponse
+    ) = {
+
+        @for(operation <- operations){
+            val @getOperationName(operation)Path =
+                path (
+                    @{operation.path
+                        .map(_.fold(
+                            resource => "\"" + resource + "\"",
+                            pathParam => "Segment"
+                        ))
+                        .mkString{"/"}
                     }
-                }
+                ) {
+                    @defining(operation.path.flatMap(_.right.toOption)){ pathParams =>
+                        @if(pathParams.nonEmpty){
+                            case (@{pathParams.map(_.name).mkString(",")}) =>
+                        }
+                    }
 
-                @for(parameter <- operation.queryParameters){
-                    parameters('@{parameter.name}.?) ( @{parameter.name} =>
-                }
-                @for(parameter <- operation.headerParameters){
-                    optionalHeaderValueByName('@{parameter.name}) ( @{parameter.name} =>
-                }
+                    @for(parameter <- operation.queryParameters){
+                        parameters("@{parameter.name}".?) ( @{parameter.name} =>
+                    }
+                    @for(parameter <- operation.headerParameters){
+                        optionalHeaderValueByName("@{parameter.name}") ( @{parameter.name} =>
+                    }
 
-                @{operation.method.toLowerCase} (extractRequestContext { ctx =>
-                    @operationHandling(operation)
-                })
+                    @{operation.method.toLowerCase} (extractRequestContext { ctx =>
+                        @operationHandling(operation)
+                    })
 
-                @for(_ <- operation.queryParameters){)}
-                @for(_ <- operation.headerParameters){)}
-            }
+                    @for(_ <- operation.queryParameters){)}
+                    @for(_ <- operation.headerParameters){)}
+                }
+        }
+
+        @for(operation <- operations){
+            @getOperationName(operation)Path ~
+        }
+            pathPrefix("") ( ctx => ctx.complete(defaultResponse(ctx)) )
     }
 }

@@ -127,10 +127,10 @@ object Main extends App with ApiProcess {
     toComputedName(List(op.name))
 
   def generateCode(apiPath: String, directory: File): Unit = {
-    def inOneLine(s: Any) = s.toString.replaceAll("(\n|\r| )+", " ").trim
-    def cleanTemplate(s: Any) = {
+    def inOneLine(s: Any) =
+      s.toString.replaceAll("(\n|\r| )+", " ").trim
+    def cleanTemplate(s: Any) =
       s.toString.replaceAll("(^(\n|\r) *)+|( *(\n|\r))+", "\n").trim
-    }
 
     val parseOptions = {
       val p = new ParseOptions()
@@ -140,40 +140,48 @@ object Main extends App with ApiProcess {
     }
     val openAPI: OpenAPI = new OpenAPIV3Parser().read(apiPath, Nil.asJava, parseOptions)
     val (_models, _responses, _requestBodies, _operations) = process(openAPI)
-    val codeFile = (directory / "stuff.scala").clear()
+    val stuffFile = (directory / "Stuff.scala").clear()
+    val operationsFile = (directory / "Operations.scala").clear()
+    val operationsHandlerFile = (directory / "OperationsHandler.scala").clear()
+    val modelsFile = (directory / "Models.scala").clear()
+    val requestsFile = (directory / "Requests.scala").clear()
+    val responsesFile = (directory / "Responses.scala").clear()
+    val parameterHandlers = (directory / "ParameterHandlers.scala").clear()
+    val jsonHandlers = (directory / "JsonHandlers.scala").clear()
+    val xmlHandlers = (directory / "XmlHandlers.scala").clear()
 
-    codeFile.appendLine("//models")
+    //models
     _models
       .collect {
         case m: Model.Object => models.txt.objectModel(m, getModelType)
         case m: Model.TypedMap => models.txt.typedMapModel(m, getModelType(_, true))
       }
       .map(inOneLine)
-      .foreach(codeFile.appendLine)
-    codeFile.appendLine("//request bodies")
+      .foreach(modelsFile.appendLine)
+    //request bodies
     _requestBodies
       .map(requestBody => requests.txt.requestBody(requestBody, getRequestBodyType, getMediaTypeModelType))
-      .foreach(s => codeFile.appendLine(cleanTemplate(s)))
-    codeFile.appendLine("//responses")
+      .foreach(s => requestsFile.appendLine(cleanTemplate(s)))
+    //responses
     _responses
       .collect {
         case r: Response.BaseResponse => responses.txt.response(r, getResponseType, getMediaTypeModelType, getHeaderType)
       }
       .map(inOneLine)
-      .foreach(codeFile.appendLine)
-    codeFile.appendLine("//model handlers")
-    codeFile.appendLine(cleanTemplate(txt.error()))
+      .foreach(responsesFile.appendLine)
+    //handlers
+    stuffFile.appendLine(cleanTemplate(txt.error()))
     _operations
       .flatMap(o => o.path.flatMap(_.toOption) ++ o.headerParameters ++ o.queryParameters)
       .distinct
       .map(p => cleanTemplate(handlers.txt.parameter(p, getModelType)))
-      .foreach(codeFile.appendLine)
-    codeFile.appendLine(cleanTemplate(handlers.json.txt.handler(_models, getModelType)))
-    codeFile.appendLine(cleanTemplate(handlers.xml.txt.handler(_models, getModelType)))
-    codeFile.appendLine("//operations")
-    codeFile.appendLine(cleanTemplate(operation.txt.interface(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyTypeParam(_requestBodies))))
-    codeFile.appendLine("//operation impl")
-    codeFile.appendLine(cleanTemplate(txt.requestHandler(
+      .foreach(parameterHandlers.appendLine)
+    jsonHandlers.appendLine(cleanTemplate(handlers.json.txt.handler(_models, getModelType)))
+    xmlHandlers.appendLine(cleanTemplate(handlers.xml.txt.handler(_models, getModelType)))
+    //operations
+    operationsFile.appendLine(cleanTemplate(operation.txt.interface(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyTypeParam(_requestBodies))))
+    //operations handler
+    operationsHandlerFile.appendLine(cleanTemplate(txt.requestHandler(
       _operations,
       getOperationName,
       getActualResponse(_responses),
