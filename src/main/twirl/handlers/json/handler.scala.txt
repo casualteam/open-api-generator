@@ -2,8 +2,17 @@
     models: List[casualteam.openapigenerator.Model],
     getModelType: (casualteam.openapigenerator.Model,Boolean) => String
 )
+import java.nio.charset.StandardCharsets
 
-trait ModelJsonEncode[A] { def encodeJson(a: A): Either[Error,akka.http.scaladsl.model.ResponseEntity] }
+import akka.http.scaladsl.model.{RequestEntity, ResponseEntity}
+import akka.stream.Materializer
+import io.circe.syntax._
+import io.circe.{Decoder, Encoder}
+
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
+
+trait ModelJsonEncode[A] { def encodeJson(a: A): Either[Error,ResponseEntity] }
 object ModelJsonEncode {
   def apply[A](implicit sh: ModelJsonEncode[A]): ModelJsonEncode[A] = sh
 
@@ -15,7 +24,7 @@ object ModelJsonEncode {
   }
 }
 
-trait ModelJsonDecode[A] { def decodeJson(a: akka.http.scaladsl.model.RequestEntity): Either[Error,A] }
+trait ModelJsonDecode[A] { def decodeJson(a: akka.http.scaladsl.model.RequestEntity): Future[Either[Error,A]] }
 object ModelJsonDecode {
   def apply[A](implicit sh: ModelJsonDecode[A]): ModelJsonDecode[A] = sh
   object ops {
@@ -26,7 +35,19 @@ object ModelJsonDecode {
   }
 }
 
-object ModelJson {
+trait ModelJson {
+
+  private def validationEncoder[T](validate: T => Either[Error,T])(implicit d: Decoder[T]) =
+    d.emap(value => validate(value).left.map(_.value))
+
+  private def validationEncoderOption[T](validate: T => Either[Error, T])(implicit d: Decoder[Option[T]]) =
+    d.emap(_.map(value => validate(value).left.map(_.value).map(Option(_))).getOrElse(Right(None)))
+
+  private implicit class EitherValidator[T](either: T => Either[Error, T]) {
+    def combine(that: T => Either[Error, T]) =
+      either.andThen(_.flatMap(that))
+  }
+
   @{models
     .collect {
       case m: casualteam.openapigenerator.Model.Object => handlers.json.txt.objectModel(m, getModelType)
@@ -34,5 +55,21 @@ object ModelJson {
     }
   }
 
-  @(handlers.json.txt.primitiveTypes())
+  implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T](implicit encoder:Encoder[T]) =
+      new ModelJsonEncode[T]{
+          override def encodeJson(a: T): Either[Error, ResponseEntity] = {
+              Right(encoder(a).noSpaces)
+          }
+      }
+
+  implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T](implicit d:Decoder[T], ec: ExecutionContext, m: Materializer) =
+      new ModelJsonDecode[T]{
+          override def decodeJson(a: RequestEntity): Future[Either[Error, T]] = {
+              a.toStrict(1.hour,1024)
+              .map(_.data.decodeString(a.contentType.charsetOption.map(_.nioCharset).getOrElse(StandardCharsets.UTF_8)))
+              .map(_.asJson.as[T].left.map(f => Error(f.message)))
+          }
+      }
 }
+
+object ModelJson extends ModelJson

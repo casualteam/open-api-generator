@@ -140,15 +140,16 @@ object Main extends App with ApiProcess {
     }
     val openAPI: OpenAPI = new OpenAPIV3Parser().read(apiPath, Nil.asJava, parseOptions)
     val (_models, _responses, _requestBodies, _operations) = process(openAPI)
-    val stuffFile = (directory / "Stuff.scala").clear()
+    val errorFile = (directory / "Error.scala").clear()
     val operationsFile = (directory / "Operations.scala").clear()
     val operationsHandlerFile = (directory / "OperationsHandler.scala").clear()
     val modelsFile = (directory / "Models.scala").clear()
     val requestsFile = (directory / "Requests.scala").clear()
     val responsesFile = (directory / "Responses.scala").clear()
-    val parameterHandlers = (directory / "ParameterHandlers.scala").clear()
-    val jsonHandlers = (directory / "JsonHandlers.scala").clear()
-    val xmlHandlers = (directory / "XmlHandlers.scala").clear()
+    val parameterHandlersFile = (directory / "ParameterHandlers.scala").clear()
+    val jsonHandlersFile = (directory / "JsonHandlers.scala").clear()
+    val xmlHandlersFile = (directory / "XmlHandlers.scala").clear()
+    val validationFile = (directory / "Validation.scala").clear()
 
     //models
     _models
@@ -170,14 +171,15 @@ object Main extends App with ApiProcess {
       .map(inOneLine)
       .foreach(responsesFile.appendLine)
     //handlers
-    stuffFile.appendLine(cleanTemplate(txt.error()))
+    validationFile.appendLine(cleanTemplate(txt.validation()))
+    errorFile.appendLine(cleanTemplate(txt.error()))
     _operations
       .flatMap(o => o.path.flatMap(_.toOption) ++ o.headerParameters ++ o.queryParameters)
-      .distinct
       .map(p => cleanTemplate(handlers.txt.parameter(p, getModelType)))
-      .foreach(parameterHandlers.appendLine)
-    jsonHandlers.appendLine(cleanTemplate(handlers.json.txt.handler(_models, getModelType)))
-    xmlHandlers.appendLine(cleanTemplate(handlers.xml.txt.handler(_models, getModelType)))
+      .distinct
+      .foreach(parameterHandlersFile.appendLine)
+    jsonHandlersFile.appendLine(cleanTemplate(handlers.json.txt.handler(_models, getModelType)))
+    xmlHandlersFile.appendLine(cleanTemplate(handlers.xml.txt.handler(_models, getModelType)))
     //operations
     operationsFile.appendLine(cleanTemplate(operation.txt.interface(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyTypeParam(_requestBodies))))
     //operations handler

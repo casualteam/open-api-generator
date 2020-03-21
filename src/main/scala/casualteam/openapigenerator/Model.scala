@@ -19,10 +19,14 @@ object Model {
     name: EntityName) extends Model
 
   case class String(
-    name: EntityName) extends Model
+    name: EntityName,
+    minLength: Option[Int],
+    maxLength: Option[Int]) extends Model
 
   case class Integer(
-    name: EntityName) extends Model
+    name: EntityName,
+    min: Option[Long],
+    max: Option[Long]) extends Model
 
   case class DateTime(
     name: EntityName) extends Model
@@ -32,7 +36,9 @@ object Model {
 
   case class Array(
     name: EntityName,
-    itemModel: Model) extends Model
+    itemModel: Model,
+    minLength: Option[Int],
+    maxLength: Option[Int]) extends Model
 
   case class File(
     name: EntityName) extends Model

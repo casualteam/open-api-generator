@@ -131,14 +131,20 @@ trait ApiProcess {
         schema match {
           case s: StringSchema =>
             Model.String(
-              name = modelName)
+              name = modelName,
+              minLength = Option(s.getMinLength),
+              maxLength = Option(s.getMaxLength))
           case s: ArraySchema =>
             Model.Array(
               name = modelName,
-              itemModel = getModel(computedName :+ "Item", None, s.getItems))
+              itemModel = getModel(computedName :+ "Item", None, s.getItems),
+              minLength = Option(s.getMinItems),
+              maxLength = Option(s.getMaxItems))
           case s: IntegerSchema =>
             Model.Integer(
-              name = modelName)
+              name = modelName,
+              min = Option(s.getMinimum).map(_.longValue),
+              max = Option(s.getMaximum).map(_.longValue))
           case s: DateTimeSchema =>
             Model.DateTime(
               name = modelName)

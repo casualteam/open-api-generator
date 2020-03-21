@@ -10,70 +10,76 @@
     getActualRequestBody: casualteam.openapigenerator.RequestBody => casualteam.openapigenerator.RequestBody.Basic
  )
 
-import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.server._
-import akka.http.scaladsl._
-import ModelJsonEncode.ops._
-import ModelXmlEncode.ops._
-import ModelJsonDecode.ops._
-import ModelXmlDecode.ops._
 import ModelJson._
+import ModelJsonDecode.ops._
+import ModelJsonEncode.ops._
 import ModelXml._
+import ModelXmlDecode.ops._
+import ModelXmlEncode.ops._
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server._
+import akka.stream.Materializer
+
+import scala.concurrent.{ExecutionContext, Future}
 
 @operationHandling(operation: casualteam.openapigenerator.Operation) = {
     @if(operation.hasInput) {
         @if(operation.requestBody.isDefined){
-            val @getRequestBodyName(operation.requestBody.get) = ctx.request.entity.getContentType match {
+            val requestBody = ctx.request.entity.getContentType match {
                 @defining(getActualRequestBody(operation.requestBody.get)){ requestBody =>
                     @for((contentType,mediaTypeModel) <- requestBody.contentTypeModels.iterator){
                         case m if m == ContentType.parse("@contentType").right.get =>
                             ctx.request.entity.@getMediaTypeModelDecoder(mediaTypeModel,requestBody.required)
                             @if(requestBody.required) {
-                                .map(@getRequestBodyType(requestBody).`@contentType`)
-                            } else {
                                 .map(_.map(@getRequestBodyType(requestBody).`@contentType`))
+                            } else {
+                                .map(_.map(_.map(@getRequestBodyType(requestBody).`@contentType`)))
                             }
                     }
                     @for((contentType,mediaTypeModel) <- requestBody.contentTypeModels.toList.headOption){
                         case _ =>
                             ctx.request.entity.@getMediaTypeModelDecoder(mediaTypeModel,requestBody.required)
                             @if(requestBody.required) {
-                                .map(@getRequestBodyType(requestBody).`@contentType`)
-                            } else {
                                 .map(_.map(@getRequestBodyType(requestBody).`@contentType`))
+                            } else {
+                                .map(_.map(_.map(@getRequestBodyType(requestBody).`@contentType`)))
                             }
                     }
                 }
             }
+        } else {
+            val requestBody = Future.successful(())
         }
 
-        val request = for {
-            @if(operation.requestBody.isDefined){
-                _@getRequestBodyName(operation.requestBody.get) <- @getRequestBodyName(operation.requestBody.get)
-            }
-            @for(p <- operation.path.flatMap(_.right.toOption)) {
-              _@{p.name} <- @{p.name}ParameterDecoder.@{p.name}ParameterDecoder(Some(@{p.name}))
-            }
-            @for(p <- operation.queryParameters ++ operation.headerParameters) {
-              _@{p.name} <- @{p.name}ParameterDecoder.@{p.name}ParameterDecoder(@{p.name})
-            }
-        } yield {
-            @defining(operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters){ parameters =>
-                Operations.@getOperationName(operation)Request(
-                    @if(operation.requestBody.isDefined){
-                        @getRequestBodyName(operation.requestBody.get) = _@getRequestBodyName(operation.requestBody.get) @if(parameters.nonEmpty){,}
-                    }
-                    @for((p,i) <- parameters.zipWithIndex) {
-                      @{p.name} = _@{p.name} @if(i < parameters.size -1){,}
-                    }
-                )
+        val request = requestBody.map{ _requestBody =>
+            for {
+                @if(operation.requestBody.isDefined){
+                    _@getRequestBodyName(operation.requestBody.get) <- _requestBody
+                }
+                @for(p <- operation.path.flatMap(_.right.toOption)) {
+                  _@{p.name} <- @{p.name}ParameterDecoder.@{p.name}ParameterDecoder(Some(@{p.name}))
+                }
+                @for(p <- operation.queryParameters ++ operation.headerParameters) {
+                  _@{p.name} <- @{p.name}ParameterDecoder.@{p.name}ParameterDecoder(@{p.name})
+                }
+            } yield {
+                @defining(operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters){ parameters =>
+                    Operations.@getOperationName(operation)Request(
+                        @if(operation.requestBody.isDefined){
+                            @getRequestBodyName(operation.requestBody.get) = _@getRequestBodyName(operation.requestBody.get) @if(parameters.nonEmpty){,}
+                        }
+                        @for((p,i) <- parameters.zipWithIndex) {
+                          @{p.name} = _@{p.name} @if(i < parameters.size -1){,}
+                        }
+                    )
+                }
             }
         }
     } else {
-        val request = Right(Operations.@getOperationName(operation)Request())
+        val request = Future.successful(Right(Operations.@getOperationName(operation)Request()))
     }
-    onSuccess(operations.@{getOperationName(operation)}(request)){ resp =>
+    onSuccess(request.flatMap(operations.@{getOperationName(operation)})){ resp =>
         val mediaTypeNegotiatorResponse = new MediaTypeNegotiator(ctx.request.headers)
         resp match {
             @for((statusCode,response) <- operation.responses.iterator) {
@@ -111,7 +117,7 @@ object OperationHandler {
     def getOperationHandler(
         operations:Operations,
         defaultResponse: RequestContext => HttpResponse
-    ) = {
+    )(implicit ex:ExecutionContext, materializer: Materializer) = {
 
         @for(operation <- operations){
             val @getOperationName(operation)Path =

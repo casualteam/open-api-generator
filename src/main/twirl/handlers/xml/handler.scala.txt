@@ -15,7 +15,7 @@ object ModelXmlEncode {
   }
 }
 
-trait ModelXmlDecode[A] { def decodeXml(a: akka.http.scaladsl.model.RequestEntity): Either[Error,A] }
+trait ModelXmlDecode[A] { def decodeXml(a: akka.http.scaladsl.model.RequestEntity): scala.concurrent.Future[Either[Error,A]] }
 object ModelXmlDecode {
   def apply[A](implicit sh: ModelXmlDecode[A]): ModelXmlDecode[A] = sh
   object ops {
