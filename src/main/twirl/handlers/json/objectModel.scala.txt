@@ -2,6 +2,7 @@
     model: casualteam.openapigenerator.Model.Object,
     getModelType: (casualteam.openapigenerator.Model,Boolean) => String,
     )
+
 implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString}:Encoder[@getModelType(model, true)] =
     @defining(model.fields.keys.toList){ fields =>
         Encoder.forProduct@{fields.size}(

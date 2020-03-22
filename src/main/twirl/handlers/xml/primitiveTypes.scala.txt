@@ -1,4 +1,5 @@
 @()
+
 implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelXmlEncode[String] = ???
 implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelXmlEncode[Int] = ???
 implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelXmlEncode[java.time.Instant] = ???
