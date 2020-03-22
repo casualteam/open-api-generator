@@ -46,7 +46,7 @@ implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString}:Encoder[@
     } else None
 }
 
-implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString} =
+implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString}:Decoder[@getModelType(model, true)] =
     Decoder.instance[@getModelType(model, true)] { c =>
         for {
             @for((f,i) <- model.fields.zipWithIndex) {
