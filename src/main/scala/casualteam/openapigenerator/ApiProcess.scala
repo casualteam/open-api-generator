@@ -132,14 +132,14 @@ trait ApiProcess {
           case s: StringSchema =>
             Model.String(
               name = modelName,
-              minLength = Option(s.getMinLength),
-              maxLength = Option(s.getMaxLength))
+              minLength = Option(s.getMinLength).map(_.toInt),
+              maxLength = Option(s.getMaxLength).map(_.toInt))
           case s: ArraySchema =>
             Model.Array(
               name = modelName,
               itemModel = getModel(computedName :+ "Item", None, s.getItems),
-              minLength = Option(s.getMinItems),
-              maxLength = Option(s.getMaxItems))
+              minLength = Option(s.getMinItems).map(_.toInt),
+              maxLength = Option(s.getMaxItems).map(_.toInt))
           case s: IntegerSchema =>
             Model.Integer(
               name = modelName,
