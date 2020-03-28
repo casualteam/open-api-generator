@@ -113,7 +113,7 @@ object Main extends App with ApiProcess {
 
   def getMediaTypeModelDecoder(mediaTypeModel: MediaTypeModel, required: Boolean): String = {
     MediaTypeModel.fold(mediaTypeModel)(
-      m => s"decodeJson[${getModelType(m.model, required)}]",
+      m => s"decodeJson[${getModelType(m.model, required)}](requestTimeout,requestMaxBytes,defaultCharset)",
       m => s"decodeXml[${getModelType(m.model, required)}]",
       m => s"decodeXml[${getModelType(m.model, required)}]",
       m => s"decodeXml[${getModelType(m.model, required)}]",
@@ -125,6 +125,34 @@ object Main extends App with ApiProcess {
 
   def getOperationName(op: Operation): String =
     toComputedName(List(op.name))
+
+  def getValidationCode(model: Model) = {
+    val validations = casualteam.openapigenerator.Model.fold(model)(
+      ref => Nil,
+      _object => Nil,
+      typedMap => Nil,
+      freeMap => Nil,
+      string => {
+        Seq(
+          string.minLength.map(minLength => s"Validation.minLengthString($minLength)"),
+          string.maxLength.map(maxLength => s"Validation.maxLengthString($maxLength)")).flatten
+      },
+      integer => {
+        Seq(
+          integer.min.map(min => s"Validation.min[${getModelType(model, true)}]($min)"),
+          integer.max.map(max => s"Validation.max[${getModelType(model, true)}]($max)")).flatten
+      },
+      dateTime => Nil,
+      boolean => Nil,
+      array => {
+        Seq(
+          array.minLength.map(minLength => s"Validation.minLength[${getModelType(model, true)}]($minLength)"),
+          array.maxLength.map(maxLength => s"Validation.maxLength[${getModelType(model, true)}]($maxLength)")).flatten
+      },
+      file => Nil)
+    if (validations.nonEmpty) validations.mkString(" _ combine ")
+    else ""
+  }
 
   def generateCode(apiPath: String, directory: File): Unit = {
     def inOneLine(s: Any) =
@@ -146,7 +174,7 @@ object Main extends App with ApiProcess {
     val modelsFile = (directory / "Models.scala").clear()
     val requestsFile = (directory / "Requests.scala").clear()
     val responsesFile = (directory / "Responses.scala").clear()
-    val parameterHandlersFile = (directory / "ParameterHandlers.scala").clear()
+    val parameterHandlersFile = (directory / "ParameterDecode.scala").clear()
     val jsonHandlersFile = (directory / "JsonHandlers.scala").clear()
     val xmlHandlersFile = (directory / "XmlHandlers.scala").clear()
     val validationFile = (directory / "Validation.scala").clear()
@@ -173,26 +201,24 @@ object Main extends App with ApiProcess {
     //handlers
     validationFile.appendLine(cleanTemplate(txt.validation()))
     errorFile.appendLine(cleanTemplate(txt.error()))
-    _operations
-      .flatMap(o => o.path.flatMap(_.toOption) ++ o.headerParameters ++ o.queryParameters)
-      .map(p => cleanTemplate(handlers.txt.parameter(p, getModelType)))
-      .distinct
-      .foreach(parameterHandlersFile.appendLine)
-    jsonHandlersFile.appendLine(cleanTemplate(handlers.json.txt.handler(_models, getModelType)))
+    parameterHandlersFile.appendLine(cleanTemplate(handlers.txt.parameter()))
+    jsonHandlersFile.appendLine(cleanTemplate(handlers.json.txt.handler(_models, getModelType, getValidationCode)))
     xmlHandlersFile.appendLine(cleanTemplate(handlers.xml.txt.handler(_models, getModelType)))
     //operations
     operationsFile.appendLine(cleanTemplate(operation.txt.interface(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyTypeParam(_requestBodies))))
     //operations handler
-    operationsHandlerFile.appendLine(cleanTemplate(txt.requestHandler(
-      _operations,
-      getOperationName,
-      getActualResponse(_responses),
-      getModelType,
-      getRequestBodyName,
-      getRequestBodyType,
-      getMediaTypeModelEncoder,
-      getMediaTypeModelDecoder,
-      getActualRequestBody(_requestBodies))))
+    operationsHandlerFile.appendLine(
+      cleanTemplate(txt.operationsHandler(
+        _operations,
+        getOperationName,
+        getActualResponse(_responses),
+        getModelType,
+        getRequestBodyName,
+        getRequestBodyType,
+        getMediaTypeModelEncoder,
+        getMediaTypeModelDecoder,
+        getActualRequestBody(_requestBodies),
+        getValidationCode)))
   }
 
   def generate(config: Config): Unit = {

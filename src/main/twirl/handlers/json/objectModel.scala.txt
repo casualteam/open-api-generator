@@ -1,6 +1,7 @@
 @(
     model: casualteam.openapigenerator.Model.Object,
     getModelType: (casualteam.openapigenerator.Model,Boolean) => String,
+    getValidationCode: casualteam.openapigenerator.Model => String
     )
 
 implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString}:Encoder[@getModelType(model, true)] =
@@ -13,37 +14,10 @@ implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString}:Encoder[@
     }
 
 @modelValidation(model: casualteam.openapigenerator.Model, required: Boolean) = @{
-    val validations = casualteam.openapigenerator.Model.fold(model)(
-        ref => Nil,
-        _object => Nil,
-        typedMap => Nil,
-        freeMap => Nil,
-        string => {
-            Seq(
-                string.minLength.map(minLength => s"Validation.minLengthString($minLength)"),
-                string.maxLength.map(maxLength => s"Validation.maxLengthString($maxLength)")
-            ).flatten
-        },
-        integer => {
-           Seq(
-               integer.min.map(min => s"Validation.min[${getModelType(model,true)}]($min)"),
-               integer.max.map(max => s"Validation.max[${getModelType(model,true)}]($max)")
-           ).flatten
-       },
-        dateTime => Nil,
-        boolean => Nil,
-        array => {
-             Seq(
-                 array.minLength.map(minLength => s"Validation.minLength[${getModelType(model,true)}]($minLength)"),
-                 array.maxLength.map(maxLength => s"Validation.maxLength[${getModelType(model,true)}]($maxLength)")
-             ).flatten
-         },
-        file => Nil
-    )
-    if (validations.nonEmpty){
-        val validationOp = validations.mkString(" _ combine ")
-        if(required) Some(s"validationEncoder($validationOp)")
-        else Some(s"validationEncoderOption($validationOp)")
+    val validation = getValidationCode(model)
+    if (validation.nonEmpty){
+        if(required) Some(s"validationEncoder($validation)")
+        else Some(s"validationEncoderOption($validation)")
     } else None
 }
 

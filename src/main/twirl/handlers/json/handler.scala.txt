@@ -1,8 +1,9 @@
 @(
     models: List[casualteam.openapigenerator.Model],
-    getModelType: (casualteam.openapigenerator.Model,Boolean) => String
+    getModelType: (casualteam.openapigenerator.Model,Boolean) => String,
+    getValidationCode: casualteam.openapigenerator.Model => String
 )
-import java.nio.charset.StandardCharsets
+import java.nio.charset.Charset
 
 import akka.http.scaladsl.model.{RequestEntity, ResponseEntity}
 import akka.stream.Materializer
@@ -24,13 +25,23 @@ object ModelJsonEncode {
   }
 }
 
-trait ModelJsonDecode[A] { def decodeJson(a: akka.http.scaladsl.model.RequestEntity): Future[Either[Error,A]] }
+trait ModelJsonDecode[A] {
+  def decodeJson(
+    requestEntity: RequestEntity,
+    requestTimeout: FiniteDuration,
+    requestMaxBytes: Long,
+    defaultCharset: Charset
+  ): Future[Either[Error, A]]
+}
 object ModelJsonDecode {
   def apply[A](implicit sh: ModelJsonDecode[A]): ModelJsonDecode[A] = sh
   object ops {
-    def decodeJson[A: ModelJsonDecode](a: akka.http.scaladsl.model.RequestEntity) = ModelJsonDecode[A].decodeJson(a)
     implicit class ModelJsonDecodeOps(a: akka.http.scaladsl.model.RequestEntity) {
-      def decodeJson[A: ModelJsonDecode] = ModelJsonDecode[A].decodeJson(a)
+      def decodeJson[A: ModelJsonDecode](
+        timeout: FiniteDuration,
+        maxBytes: Long,
+        defaultCharset: Charset
+      ) = ModelJsonDecode[A].decodeJson(a, timeout, maxBytes, defaultCharset)
     }
   }
 }
@@ -43,14 +54,9 @@ trait ModelJson {
   private def validationEncoderOption[T](validate: T => Either[Error, T])(implicit d: Decoder[Option[T]]) =
     d.emap(_.map(value => validate(value).left.map(_.value).map(Option(_))).getOrElse(Right(None)))
 
-  private implicit class EitherValidator[T](either: T => Either[Error, T]) {
-    def combine(that: T => Either[Error, T]) =
-      either.andThen(_.flatMap(that))
-  }
-
   @{models
     .collect {
-      case m: casualteam.openapigenerator.Model.Object => handlers.json.txt.objectModel(m, getModelType)
+      case m: casualteam.openapigenerator.Model.Object => handlers.json.txt.objectModel(m, getModelType, getValidationCode)
       case m: casualteam.openapigenerator.Model.TypedMap => handlers.json.txt.typedMapModel(m, getModelType(_, true))
     }
   }
@@ -63,13 +69,18 @@ trait ModelJson {
       }
 
   implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T](implicit d:Decoder[T], ec: ExecutionContext, m: Materializer) =
-      new ModelJsonDecode[T]{
-          override def decodeJson(a: RequestEntity): Future[Either[Error, T]] = {
-              a.toStrict(1.hour,1024)
-              .map(_.data.decodeString(a.contentType.charsetOption.map(_.nioCharset).getOrElse(StandardCharsets.UTF_8)))
-              .map(_.asJson.as[T].left.map(f => Error(f.message)))
-          }
-      }
+    new ModelJsonDecode[T] {
+        override def decodeJson(
+            requestEntity: RequestEntity,
+            timeout: FiniteDuration,
+            maxBytes: Long,
+            defaultCharset: Charset
+        ): Future[Either[Error, T]] = {
+            requestEntity.toStrict(timeout, maxBytes)
+                .map(_.data.decodeString(requestEntity.contentType.charsetOption.map(_.nioCharset).getOrElse(defaultCharset)))
+                .map(_.asJson.as[T].left.map(f => Error(f.message)))
+        }
+    }
 }
 
 object ModelJson extends ModelJson

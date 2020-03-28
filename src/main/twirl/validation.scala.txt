@@ -1,6 +1,12 @@
 @()
 
 object Validation {
+
+    implicit class EitherValidator[T](either: T => Either[Error, T]) {
+        def combine(that: T => Either[Error, T]) =
+            either.andThen(_.flatMap(that))
+    }
+
     def min[T](min: T)(value:T)(implicit num: Numeric[T]): Either[Error, T] =
         if (num.compare(value, min) < 0) Left(Error(s"Number must be at least $min")) else Right(value)
 

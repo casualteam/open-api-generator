@@ -1,7 +1,5 @@
-@(
-    parameter: casualteam.openapigenerator.Parameter,
-    getModelType: (casualteam.openapigenerator.Model, Boolean) => String
-)
-object @{parameter.name}ParameterDecoder {
-    def @{parameter.name}ParameterDecoder(in: Option[String]): Either[Error, @getModelType(parameter.model, parameter.required)] = ???
+@()
+
+object ParameterDecode{
+    def decodeString[T](in: Option[String]): Either[Error,T] = ???
 }

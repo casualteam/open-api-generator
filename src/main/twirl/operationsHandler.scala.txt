@@ -7,8 +7,11 @@
     getRequestBodyType: casualteam.openapigenerator.RequestBody => String,
     getMediaTypeModelEncoder: casualteam.openapigenerator.MediaTypeModel => String,
     getMediaTypeModelDecoder: (casualteam.openapigenerator.MediaTypeModel,Boolean) => String,
-    getActualRequestBody: casualteam.openapigenerator.RequestBody => casualteam.openapigenerator.RequestBody.Basic
+    getActualRequestBody: casualteam.openapigenerator.RequestBody => casualteam.openapigenerator.RequestBody.Basic,
+    getValidationCode: casualteam.openapigenerator.Model => String
  )
+
+import java.nio.charset.Charset
 
 import ModelJson._
 import ModelJsonDecode.ops._
@@ -20,8 +23,22 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server._
 import akka.stream.Materializer
+import Validation._
 
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
+
+@modelValidation(model: casualteam.openapigenerator.Model, required: Boolean) = {
+    @defining(getValidationCode(model)){ validation =>
+        @if(validation.nonEmpty){
+         @if(required){
+            .flatMap(@validation)
+         }else{
+            .flatMap(_.map(@validation).map(Some(_)).getOrElse(Right(None)))
+         }
+        }else{}
+    }
+}
 
 @operationHandling(operation: casualteam.openapigenerator.Operation) = {
     @if(operation.hasInput) {
@@ -58,10 +75,10 @@ import scala.concurrent.{ExecutionContext, Future}
                     _@getRequestBodyName(operation.requestBody.get) <- _requestBody
                 }
                 @for(p <- operation.path.flatMap(_.right.toOption)) {
-                  _@{p.name} <- @{p.name}ParameterDecoder.@{p.name}ParameterDecoder(Some(@{p.name}))
+                    _@{p.name} <-  ParameterDecode.decodeString[@getModelType(p.model,p.required)](Some(@{p.name}))@modelValidation(p.model,p.required)
                 }
                 @for(p <- operation.queryParameters ++ operation.headerParameters) {
-                  _@{p.name} <- @{p.name}ParameterDecoder.@{p.name}ParameterDecoder(@{p.name})
+                    _@{p.name} <-  ParameterDecode.decodeString[@getModelType(p.model,p.required)](@{p.name})@modelValidation(p.model,p.required)
                 }
             } yield {
                 @defining(operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters){ parameters =>
@@ -112,11 +129,14 @@ import scala.concurrent.{ExecutionContext, Future}
     }
 }
 
-object OperationHandler {
+object OperationsHandler {
 
-    def getOperationHandler(
+    def getOperationsHandler(
         operations:Operations,
-        defaultResponse: RequestContext => HttpResponse
+        fallbackResponse: RequestContext => HttpResponse,
+        requestTimeout: FiniteDuration,
+        requestMaxBytes: Long,
+        defaultCharset: Charset
     )(implicit ex:ExecutionContext, materializer: Materializer) = {
 
         @for(operation <- operations){
@@ -155,6 +175,6 @@ object OperationHandler {
         @for(operation <- operations){
             @getOperationName(operation)Path ~
         }
-            pathPrefix("") ( ctx => ctx.complete(defaultResponse(ctx)) )
+            pathPrefix("") ( ctx => ctx.complete(fallbackResponse(ctx)) )
     }
 }

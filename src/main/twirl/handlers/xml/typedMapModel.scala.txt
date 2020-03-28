@@ -1,7 +1,0 @@
-@(
-    model: casualteam.openapigenerator.Model.TypedMap,
-    getModelType: casualteam.openapigenerator.Model => String
-)
-
-implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelXmlEncode[@getModelType(model)] = ???
-implicit val m@{scala.util.Random.alphanumeric.take(10).mkString}: ModelXmlDecode[@getModelType(model)] = ???
