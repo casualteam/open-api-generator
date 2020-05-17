@@ -174,7 +174,7 @@ object Main extends App with ApiProcess {
     val modelsFile = (directory / "Models.scala").clear()
     val requestsFile = (directory / "Requests.scala").clear()
     val responsesFile = (directory / "Responses.scala").clear()
-    val parameterHandlersFile = (directory / "ParameterDecode.scala").clear()
+    val parameterHandlersFile = (directory / "ParameterDecoder.scala").clear()
     val jsonHandlersFile = (directory / "JsonHandlers.scala").clear()
     val xmlHandlersFile = (directory / "XmlHandlers.scala").clear()
     val validationFile = (directory / "Validation.scala").clear()

@@ -24,6 +24,8 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server._
 import akka.stream.Materializer
 import Validation._
+import ParameterDecoder._
+import ParameterDecoder.ops._
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
@@ -74,11 +76,8 @@ import scala.concurrent.{ExecutionContext, Future}
                 @if(operation.requestBody.isDefined){
                     _@getRequestBodyName(operation.requestBody.get) <- _requestBody
                 }
-                @for(p <- operation.path.flatMap(_.right.toOption)) {
-                    _@{p.name} <-  ParameterDecode.decodeString[@getModelType(p.model,p.required)](Some(@{p.name}))@modelValidation(p.model,p.required)
-                }
-                @for(p <- operation.queryParameters ++ operation.headerParameters) {
-                    _@{p.name} <-  ParameterDecode.decodeString[@getModelType(p.model,p.required)](@{p.name})@modelValidation(p.model,p.required)
+                @for(p <- operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters) {
+                    _@{p.name} <-  @{p.name}.decodeString[@getModelType(p.model,p.required)]@modelValidation(p.model,p.required)
                 }
             } yield {
                 @defining(operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters){ parameters =>

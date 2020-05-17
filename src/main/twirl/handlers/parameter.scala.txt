@@ -1,5 +1,61 @@
 @()
 
-object ParameterDecode{
-    def decodeString[T](in: Option[String]): Either[Error,T] = ???
+import scala.collection.immutable.Queue
+import scala.util.Try
+
+trait ParameterDecoder[T, U] {
+  def decodeString(in: T): Either[Error, U]
+}
+
+object ParameterDecoder {
+  def apply[T, U](implicit sh: ParameterDecoder[T, U]): ParameterDecoder[T, U] = sh
+  object ops {
+    implicit class ParameterDecoderOps1(in: Option[String]) {
+      def decodeString[T](implicit d: ParameterDecoder[Option[String], T]) = ParameterDecoder[Option[String], T].decodeString(in)
+    }
+    implicit class ParameterDecoderOps2(in: String) {
+      def decodeString[T](implicit d: ParameterDecoder[String, T]) = ParameterDecoder[String, T].decodeString(in)
+    }
+  }
+
+  implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T,U](implicit dec:ParameterDecoder[T,U]) =
+    new ParameterDecoder[Option[T], U] {
+      override def decodeString(in: Option[T]): Either[Error, U] =
+        in.map(dec.decodeString).getOrElse(Left(Error("Parameter is required")))
+    }
+
+  implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T, U](implicit dec: ParameterDecoder[T, U]) =
+    new ParameterDecoder[Option[T], Option[U]] {
+      override def decodeString(in: Option[T]): Either[Error, Option[U]] =
+        in.map(dec.decodeString)
+          .map(_.map(Some(_)))
+          .getOrElse(Right(None))
+    }
+
+  implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString} =
+    new ParameterDecoder[String, String] {
+      override def decodeString(in: String): Either[Error, String] =
+        Right(in)
+    }
+
+  implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString} =
+    new ParameterDecoder[String, Int] {
+      override def decodeString(in: String): Either[Error, Int] =
+        Try(in.toInt)
+          .map(Right(_))
+          .recover { case _: NumberFormatException => Left(Error("Invalid number")) }
+          .get
+    }
+
+  implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T](implicit dec: ParameterDecoder[String, T]) =
+    new ParameterDecoder[String, List[T]] {
+      override def decodeString(in: String): Either[Error, List[T]] =
+        in.split(",")
+          .map(dec.decodeString)
+          .foldLeft[Either[Error, Queue[T]]](Right(Queue.empty))(
+            (acc, curr) => for { _acc <- acc; _curr <- curr } yield { _acc :+ _curr }
+          )
+          .map(_.toList)
+    }
+
 }
