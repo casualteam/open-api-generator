@@ -5,10 +5,12 @@
 )
 import java.nio.charset.Charset
 
+import Validation._
 import akka.http.scaladsl.model.{RequestEntity, ResponseEntity}
 import akka.stream.Materializer
 import io.circe.syntax._
-import io.circe.{Decoder, Encoder}
+import io.circe.parser._
+import io.circe.{CursorOp, Decoder, Encoder, JsonObject}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -48,11 +50,8 @@ object ModelJsonDecode {
 
 trait ModelJson {
 
-  private def validationEncoder[T](validate: T => Either[Error,T])(implicit d: Decoder[T]) =
+  private def validationDecoder[T](validate: T => Either[Error,T] = (t:T) => Right(t))(implicit d: Decoder[T]) =
     d.emap(value => validate(value).left.map(_.value))
-
-  private def validationEncoderOption[T](validate: T => Either[Error, T])(implicit d: Decoder[Option[T]]) =
-    d.emap(_.map(value => validate(value).left.map(_.value).map(Option(_))).getOrElse(Right(None)))
 
   @{models
     .collect {
@@ -78,7 +77,13 @@ trait ModelJson {
         ): Future[Either[Error, T]] = {
             requestEntity.toStrict(timeout, maxBytes)
                 .map(_.data.decodeString(requestEntity.contentType.charsetOption.map(_.nioCharset).getOrElse(defaultCharset)))
-                .map(_.asJson.as[T].left.map(f => Error(f.message)))
+                .map { in =>
+                    parse(in)
+                        .left.map(f => Error(s"Invalid json format ${f.message}"))
+                        .flatMap(_.as[T].left.map { f =>
+                            Error(s"location=${CursorOp.opsToPath(f.history)}, message=${f.message}")
+                        })
+                }
         }
     }
 }

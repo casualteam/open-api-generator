@@ -128,6 +128,7 @@ trait ApiProcess {
       .map(Model.Ref)
       .getOrElse {
         val modelName = name.map(Right(_)).getOrElse(Left(computedName))
+        val requiredFields = Option(schema.getRequired).map(_.asScala.toList).getOrElse(Nil)
         schema match {
           case s: StringSchema =>
             Model.String(
@@ -174,7 +175,7 @@ trait ApiProcess {
                 case (fieldName, fieldSchema) =>
                   val objectField = ObjectField(
                     model = getModel(computedName :+ fieldName, None, fieldSchema),
-                    required = Option(fieldSchema.getRequired).exists(_.asScala.contains(fieldName)))
+                    required = requiredFields.contains(fieldName))
                   fieldName -> objectField
               }
               .toMap

@@ -8,20 +8,20 @@ object Validation {
     }
 
     def min[T](min: T)(value:T)(implicit num: Numeric[T]): Either[Error, T] =
-        if (num.compare(value, min) < 0) Left(Error(s"Number must be at least $min")) else Right(value)
+        if (num.compare(value, min) < 0) Left(Error(s"Number must be greater than $min")) else Right(value)
 
     def max[T](max: T)(value:T)(implicit num: Numeric[T]): Either[Error, T] =
-        if (num.compare(value, max) > 0) Left(Error(s"Number must be at most $max")) else Right(value)
+        if (num.compare(value, max) > 0) Left(Error(s"Number must be lower than $max")) else Right(value)
 
     def minLength[T<:Seq[_]](minLength: Int)(value:T): Either[Error, T] =
-        if (value.size < minLength) Right(value) else Left(Error(s"Array must be have least $minLength elements"))
+        if (value.size > minLength) Right(value) else Left(Error(s"Array must have more than $minLength elements"))
 
     def maxLength[T<:Seq[_]](maxLength: Int)(value:T): Either[Error, T] =
-        if (value.size > maxLength) Right(value) else Left(Error(s"Array must be have most $maxLength elements"))
+        if (value.size < maxLength) Right(value) else Left(Error(s"Array must have less than $maxLength elements"))
 
     def minLengthString(minLength: Int)(value:String): Either[Error, String] =
-        if (value.size < minLength) Right(value) else Left(Error(s"The value must be at least $minLength long"))
+        if (value.size > minLength) Right(value) else Left(Error(s"String must be longer than $minLength"))
 
     def maxLengthString(maxLength: Int)(value:String): Either[Error, String] =
-        if (value.size > maxLength) Right(value) else Left(Error(s"The value must be at least maxLength long"))
+        if (value.size < maxLength) Right(value) else Left(Error(s"String must be shorter than $maxLength"))
 }

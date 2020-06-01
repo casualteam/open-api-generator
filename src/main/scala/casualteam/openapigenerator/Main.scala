@@ -249,11 +249,7 @@ object Main extends App with ApiProcess {
     organization = "test",
     organizationName = "test",
     name = "test",
-    directory = "target/out2".toFile)
-  val api2 = api1.copy(
-    apiPath = "https://petstore.swagger.io/v2/swagger.json",
     directory = "target/out1".toFile)
 
   generate(api1)
-  generate(api2)
 }

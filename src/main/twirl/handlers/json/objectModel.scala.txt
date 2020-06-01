@@ -6,27 +6,35 @@
 
 implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString}:Encoder[@getModelType(model, true)] =
     @defining(model.fields.keys.toList){ fields =>
-        Encoder.forProduct@{fields.size}(
-            @for((f,i) <- fields.zipWithIndex) { "@f" @if(i < fields.size -1){,} }
-        )(in => (
-            @for((f,i) <- fields.zipWithIndex) { in.`@f` @if(i < fields.size -1){,} }
-        ))
+        Encoder.instance(in => JsonObject(
+            @for((f,i) <- fields.zipWithIndex) {
+                "@f" -> in.`@f`.asJson @if(i < fields.size -1){,}
+            }
+        ).asJson)
     }
 
-@modelValidation(model: casualteam.openapigenerator.Model, required: Boolean) = @{
-    val validation = getValidationCode(model)
-    if (validation.nonEmpty){
-        if(required) Some(s"validationEncoder($validation)")
-        else Some(s"validationEncoderOption($validation)")
-    } else None
+@modelDecoder(model: casualteam.openapigenerator.Model, required: Boolean) = @{
+    def _modelDecoder(model: casualteam.openapigenerator.Model, required: Boolean): String = {
+        val validation = getValidationCode(model)
+        val decoderBase = s"validationDecoder($validation)"
+        val decoder = model match{
+            case _array:casualteam.openapigenerator.Model.Array =>
+                s"$decoderBase(Decoder.decodeList(${_modelDecoder(_array.itemModel, true)}))"
+            case other =>
+                decoderBase
+        }
+        if(required) s"($decoder)"
+        else s"(Decoder.decodeOption($decoder))"
+    }
+    _modelDecoder(model, required)
 }
 
 implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString}:Decoder[@getModelType(model, true)] =
     Decoder.instance[@getModelType(model, true)] { c =>
         for {
             @for((f,i) <- model.fields.zipWithIndex) {
-                @defining(modelValidation(f._2.model,f._2.required)) { validations =>
-                    f@i <- c.downField("@{f._1}").as[@getModelType(f._2.model,f._2.required)]@{validations.map(v => s"($v)").getOrElse("")}
+                @defining(modelDecoder(f._2.model,f._2.required)) { validations =>
+                    f@i <- c.downField("@{f._1}").as[@getModelType(f._2.model,f._2.required)]@validations
                 }
             }
         } yield {
