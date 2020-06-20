@@ -1,0 +1,117 @@
+@(
+    models: List[casualteam.openapigenerator.Model],
+    getModelType: (casualteam.openapigenerator.Model,Boolean) => String,
+    getValidationCode: casualteam.openapigenerator.Model => String
+)
+import java.nio.charset.Charset
+
+import Validation._
+import akka.http.scaladsl.model.{RequestEntity, ResponseEntity}
+import akka.http.scaladsl.util.FastFuture
+import akka.stream.Materializer
+import io.circe.syntax._
+import io.circe.parser._
+import io.circe.{CursorOp, Decoder, Encoder, JsonObject}
+
+import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
+
+trait ModelJsonEncode[A] { def encodeJson(a: A): ResponseEntity }
+object ModelJsonEncode {
+  def apply[A](implicit sh: ModelJsonEncode[A]): ModelJsonEncode[A] = sh
+
+  object ops {
+    def encodeJson[A: ModelJsonEncode](a: A) = ModelJsonEncode[A].encodeJson(a)
+    implicit class ModelJsonEncodeOps[A: ModelJsonEncode](a: A) {
+      def encodeJson = ModelJsonEncode[A].encodeJson(a)
+    }
+  }
+}
+
+trait ModelJsonDecode[A] {
+  def decodeJson(
+    requestEntity: RequestEntity,
+    requestTimeout: FiniteDuration,
+    requestMaxBytes: Long,
+    defaultCharset: Charset
+  ): Future[Either[List[FieldError], A]]
+}
+object ModelJsonDecode {
+  def apply[A](implicit sh: ModelJsonDecode[A]): ModelJsonDecode[A] = sh
+  object ops {
+    implicit class ModelJsonDecodeOps(a: akka.http.scaladsl.model.RequestEntity) {
+      def decodeJson[A: ModelJsonDecode](
+        timeout: FiniteDuration,
+        maxBytes: Long,
+        defaultCharset: Charset
+      ) = ModelJsonDecode[A].decodeJson(a, timeout, maxBytes, defaultCharset)
+    }
+  }
+}
+
+trait ModelJson {
+
+  private def validationDecoder[T](validate: T => Either[ErrorType,T] = (t:T) => Right(t))(implicit d: Decoder[T]) =
+    d.emap(value => validate(value).left.map(ErrorType.encode))
+
+  @{models
+    .collect {
+      case m: casualteam.openapigenerator.Model.Object => handlers.json.txt.objectModel(m, getModelType, getValidationCode)
+      case m: casualteam.openapigenerator.Model.TypedMap => handlers.json.txt.typedMapModel(m, getModelType(_, true))
+    }
+  }
+
+  implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T](implicit encoder:Encoder[T]) =
+      new ModelJsonEncode[T]{
+          override def encodeJson(a: T): ResponseEntity = {
+              encoder(a).noSpaces
+          }
+      }
+
+  implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T](implicit d:Decoder[T], ec: ExecutionContext, m: Materializer) =
+    new ModelJsonDecode[T] {
+        override def decodeJson(
+            requestEntity: RequestEntity,
+            timeout: FiniteDuration,
+            maxBytes: Long,
+            defaultCharset: Charset
+        ): Future[Either[List[FieldError], T]] = {
+            requestEntity
+            	.contentLengthOption
+            	.map { contentLength =>
+            		if (contentLength > maxBytes)
+            			FastFuture.successful(Left(List(FieldError(
+            				name = ".",
+            				location = Location.Body,
+            				errorType = ErrorType.InvalidValue(s"Request of size $contentLength was longer than the maximum of $maxBytes")
+            			))))
+            		else
+            			requestEntity.toStrict(timeout, maxBytes).map(Right(_))
+            	}
+            	.getOrElse(requestEntity.toStrict(timeout).map(Right(_)))
+            	.map { request =>
+            		request
+            			.map(_.data.decodeString(requestEntity.contentType.charsetOption.map(_.nioCharset).getOrElse(defaultCharset)))
+            			.flatMap(data => parse(data).left.map { error =>
+            				List(FieldError(
+            					name = ".",
+            					location = Location.Body,
+            					errorType = ErrorType.InvalidValue(s"Not a json: ${error.message}")
+            				))
+            			})
+            			.flatMap(_.as[T].left.map { f =>
+            				List(FieldError(
+            					name = CursorOp.opsToPath(f.history),
+            					location = Location.Body,
+            					errorType =
+            						ErrorType.decode(f.message)
+            							.orElse(ErrorType.fromCirceMessage(f.message))
+            							.getOrElse(ErrorType.Unknown)
+            				))
+            			})
+            	}
+        }
+    }
+}
+
+object ModelJson extends ModelJson

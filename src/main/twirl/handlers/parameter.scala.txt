@@ -1,0 +1,94 @@
+@()
+
+import java.time.format.DateTimeParseException
+import scala.collection.immutable.Queue
+import scala.util.Try
+
+trait ParameterDecoder[T, U] {
+  def decodeString(in: T): Either[(String,ErrorType), U]
+}
+
+object ParameterDecoder {
+  def apply[T, U](implicit sh: ParameterDecoder[T, U]): ParameterDecoder[T, U] = sh
+  object ops {
+    implicit class ParameterDecoderOps1(in: Option[String]) {
+      def decodeString[T](
+        name: String,
+        location: Location,
+        validation: T => Either[ErrorType, T] = (t: T) => Right(t)
+      )(implicit d: ParameterDecoder[Option[String], T]) =
+        ParameterDecoder[Option[String], T]
+          .decodeString(in)
+          .flatMap(a => validation(a).left.map(("", _)))
+          .left.map {
+            case (path, errorType) =>
+              List(FieldError(
+                name = s"$name$path",
+                location = location,
+                errorType = errorType
+              ))
+          }
+    }
+    implicit class ParameterDecoderOps2(val in: String) extends ParameterDecoderOps1(Some(in))
+  }
+
+  implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T,U](implicit dec:ParameterDecoder[T,U]) =
+    new ParameterDecoder[Option[T], U] {
+      def decodeString(in: Option[T]) =
+        in.map(dec.decodeString).getOrElse(Left(("",ErrorType.MissingValue)))
+    }
+
+  implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T, U](implicit dec: ParameterDecoder[T, U]) =
+    new ParameterDecoder[Option[T], Option[U]] {
+      def decodeString(in: Option[T]) =
+        in.map(dec.decodeString)
+          .map(_.map(Some(_)))
+          .getOrElse(Right(None))
+    }
+
+  implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString} =
+    new ParameterDecoder[String, String] {
+      def decodeString(in: String) =
+        Right(in)
+    }
+
+  implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString} =
+    new ParameterDecoder[String, Int] {
+      def decodeString(in: String) =
+        Try(in.toInt)
+          .map(Right(_))
+          .recover { case _: NumberFormatException => Left(("",ErrorType.InvalidValue("Invalid number"))) }
+          .get
+    }
+
+  implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString} =
+    new ParameterDecoder[String, Byte] {
+      def decodeString(in: String) =
+        Try(in.toByte)
+          .map(Right(_))
+          .recover { case _: NumberFormatException => Left(("",ErrorType.InvalidValue("Invalid byte"))) }
+          .get
+    }
+
+  implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString} =
+      new ParameterDecoder[String, java.time.Instant] {
+        def decodeString(in: String) =
+          Try(java.time.Instant.parse(in))
+            .map(Right(_))
+            .recover { case _: DateTimeParseException => Left(("",ErrorType.InvalidValue("Invalid instant"))) }
+            .get
+      }
+
+  implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T](implicit dec: ParameterDecoder[String, T]) =
+    new ParameterDecoder[String, List[T]] {
+      def decodeString(in: String) =
+        in.split(",")
+          .zipWithIndex
+          .map { case (v, i) => dec.decodeString(v).left.map { case (path, error) => (s"[$i]$path", error) } }
+          .foldLeft[Either[(String, ErrorType), Queue[T]]](Right(Queue.empty))(
+            (acc, curr) => for { _acc <- acc; _curr <- curr } yield { _acc :+ _curr }
+          )
+          .map(_.toList)
+    }
+
+}

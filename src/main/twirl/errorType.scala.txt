@@ -1,0 +1,33 @@
+@()
+sealed trait ErrorType
+
+object ErrorType{
+    final case object MissingValue extends ErrorType
+    final case class InvalidValue(error: String) extends ErrorType
+    final case object Unknown extends ErrorType
+
+    def encode(error:ErrorType): String = {
+        error match {
+            case MissingValue => "MissingValue"
+            case e:InvalidValue => s"InvalidValue:${e.error}"
+        }
+    }
+    def decode(in:String): Option[ErrorType] = {
+        in match {
+            case "MissingValue" => Some(MissingValue)
+            case s"InvalidValue:$error" => Some(InvalidValue(error))
+            case other => None
+        }
+    }
+    def fromCirceMessage(in:String): Option[ErrorType] = {
+        in match {
+            case "Attempt to decode value on failed cursor" => Some(ErrorType.MissingValue)
+            case "Boolean"=> Some(ErrorType.InvalidValue("Not a boolean"))
+            case "Char"=> Some(ErrorType.InvalidValue("Not a char"))
+            case "JsonNumber"=> Some(ErrorType.InvalidValue("Not a number"))
+            case "JsonObject"=> Some(ErrorType.InvalidValue("Not a json object"))
+            case "String"=> Some(ErrorType.InvalidValue("Not a string"))
+            case _ => None
+        }
+    }
+}

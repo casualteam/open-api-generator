@@ -1,0 +1,9 @@
+@(
+    model: casualteam.openapigenerator.Model.Object,
+    getModelType: (casualteam.openapigenerator.Model,Boolean) => String,
+    )
+case class @getModelType(model, true) (
+    @for((f,i) <- model.fields.zipWithIndex) {
+      `@{f._1}` : @getModelType(f._2.model,f._2.required) @if(i < model.fields.size -1){,}
+    }
+)

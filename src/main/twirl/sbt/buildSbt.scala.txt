@@ -1,0 +1,20 @@
+@(
+    scalaVersion: String,
+    version: String,
+    organization: String,
+    organizationName: String,
+    name: String
+)
+
+ThisBuild / scalaVersion := "@scalaVersion"
+ThisBuild / version := "@version"
+ThisBuild / organization := "@organization"
+ThisBuild / organizationName := "@organizationName"
+ThisBuild / name := "@name"
+ThisBuild / libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-http"   % "10.1.11",
+    "com.typesafe.akka" %% "akka-stream" % "2.5.26",
+    "io.circe" %% "circe-core" % "0.12.3",
+    "io.circe" %% "circe-generic" % "0.12.3",
+    "io.circe" %% "circe-parser" % "0.12.3"
+)

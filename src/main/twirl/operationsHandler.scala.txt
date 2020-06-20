@@ -1,0 +1,182 @@
+@(
+    operations: List[casualteam.openapigenerator.Operation],
+    getOperationName: casualteam.openapigenerator.Operation => String,
+    getActualResponse: casualteam.openapigenerator.Response => casualteam.openapigenerator.Response.BaseResponse,
+    getModelType: (casualteam.openapigenerator.Model, Boolean) => String,
+    getRequestBodyName: casualteam.openapigenerator.RequestBody => String,
+    getRequestBodyType: casualteam.openapigenerator.RequestBody => String,
+    getMediaTypeModelEncoder: casualteam.openapigenerator.MediaTypeModel => String,
+    getMediaTypeModelDecoder: (casualteam.openapigenerator.MediaTypeModel,Boolean) => String,
+    getActualRequestBody: casualteam.openapigenerator.RequestBody => casualteam.openapigenerator.RequestBody.Basic,
+    getValidationCode: casualteam.openapigenerator.Model => String
+ )
+
+import java.nio.charset.Charset
+
+import ModelJson._
+import ModelJsonDecode.ops._
+import ModelJsonEncode.ops._
+import ModelXml._
+import ModelXmlDecode.ops._
+import ModelXmlEncode.ops._
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server._
+import akka.stream.Materializer
+import Validation._
+import ParameterDecoder._
+import ParameterDecoder.ops._
+
+import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{ExecutionContext, Future}
+
+@modelValidation(parameter: casualteam.openapigenerator.Parameter) = {
+    @defining(getValidationCode(parameter.model)){ validation =>
+        @if(validation.nonEmpty){
+             @if(parameter.required){
+                ,
+                 validation = @validation
+             }else{
+                ,
+                 validation = _.map(@validation).map(_.map(Some(_))).getOrElse(Right(None))
+             }
+        }else{}
+    }
+}
+
+@operationHandling(operation: casualteam.openapigenerator.Operation) = {
+    @if(operation.hasInput) {
+        @if(operation.requestBody.isDefined){
+            val requestBody = ctx.request.entity.getContentType match {
+                @defining(getActualRequestBody(operation.requestBody.get)){ requestBody =>
+                    @for((contentType,mediaTypeModel) <- requestBody.contentTypeModels.iterator){
+                        case m if m == ContentType.parse("@contentType").right.get =>
+                            ctx.request.entity.@getMediaTypeModelDecoder(mediaTypeModel,requestBody.required)
+                            @if(requestBody.required) {
+                                .map(_.map(@getRequestBodyType(requestBody).`@contentType`))
+                            } else {
+                                .map(_.map(_.map(@getRequestBodyType(requestBody).`@contentType`)))
+                            }
+                    }
+                    @for((contentType,mediaTypeModel) <- requestBody.contentTypeModels.toList.headOption){
+                        case _ =>
+                            ctx.request.entity.@getMediaTypeModelDecoder(mediaTypeModel,requestBody.required)
+                            @if(requestBody.required) {
+                                .map(_.map(@getRequestBodyType(requestBody).`@contentType`))
+                            } else {
+                                .map(_.map(_.map(@getRequestBodyType(requestBody).`@contentType`)))
+                            }
+                    }
+                }
+            }
+        } else {
+            val requestBody = Future.successful(())
+        }
+
+        val request = requestBody.map{ _requestBody =>
+            for {
+                @if(operation.requestBody.isDefined){
+                    _@getRequestBodyName(operation.requestBody.get) <- _requestBody
+                }
+                @for((p,l) <- operation.path.flatMap(_.right.toOption).map((_,"Location.Path")) ++ operation.queryParameters.map((_,"Location.Query")) ++ operation.headerParameters.map((_,"Location.Header"))) {
+                    _@{p.name} <-  @{p.name}.decodeString[@getModelType(p.model,p.required)](
+                    name = "@{p.name}",
+                    location = @l
+                    @modelValidation(p)
+                    )
+                }
+            } yield {
+                @defining(operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters){ parameters =>
+                    Operations.@getOperationName(operation)Request(
+                        @if(operation.requestBody.isDefined){
+                            @getRequestBodyName(operation.requestBody.get) = _@getRequestBodyName(operation.requestBody.get) @if(parameters.nonEmpty){,}
+                        }
+                        @for((p,i) <- parameters.zipWithIndex) {
+                          @{p.name} = _@{p.name} @if(i < parameters.size -1){,}
+                        }
+                    )
+                }
+            }
+        }
+    } else {
+        val request = Future.successful(Right(Operations.@getOperationName(operation)Request()))
+    }
+    onSuccess(request.flatMap(operations.@{getOperationName(operation)})){ resp =>
+        val mediaTypeNegotiatorResponse = new MediaTypeNegotiator(ctx.request.headers)
+        resp match {
+            @for((statusCode,response) <- operation.responses.iterator) {
+                @if(statusCode == "default"){
+                    case _resp:Operations.@getOperationName(operation)Response.default
+                } else {
+                    case _resp:Operations.@getOperationName(operation)Response.`@statusCode`
+                }
+                =>
+                    @if(getActualResponse(response).contentTypeModels.nonEmpty){
+                        val respBody = mediaTypeNegotiatorResponse match {
+                            @for((contentType,mediaTypeModel) <- getActualResponse(response).contentTypeModels.iterator){
+                                case m if m.isAccepted(MediaType.parse("@contentType").right.get) =>
+                                    _resp.in.`@contentType`.@getMediaTypeModelEncoder(mediaTypeModel)
+                            }
+                            @for((contentType,mediaTypeModel) <- getActualResponse(response).contentTypeModels.toList.headOption){
+                                case _ =>
+                                    _resp.in.`@contentType`.@getMediaTypeModelEncoder(mediaTypeModel)
+                            }
+                        }
+                    } else {
+                        val respBody = HttpEntity.Empty
+                    }
+                    complete(HttpResponse(_resp.code,Nil, respBody))
+            }
+        }
+    }
+}
+
+object OperationsHandler {
+
+    def getOperationsHandler(
+        operations:Operations,
+        fallbackResponse: RequestContext => HttpResponse,
+        requestTimeout: FiniteDuration,
+        requestMaxBytes: Long,
+        defaultCharset: Charset
+    )(implicit ex:ExecutionContext, materializer: Materializer) = {
+
+        @for(operation <- operations){
+            val @getOperationName(operation)Path =
+                path (
+                    @{operation.path
+                        .map(_.fold(
+                            resource => "\"" + resource + "\"",
+                            pathParam => "Segment"
+                        ))
+                        .mkString{"/"}
+                    }
+                ) {
+                    @defining(operation.path.flatMap(_.right.toOption)){ pathParams =>
+                        @if(pathParams.nonEmpty){
+                            case (@{pathParams.map(_.name).mkString(",")}) =>
+                        }
+                    }
+
+                    @for(parameter <- operation.queryParameters){
+                        parameters("@{parameter.name}".?) ( @{parameter.name} =>
+                    }
+                    @for(parameter <- operation.headerParameters){
+                        optionalHeaderValueByName("@{parameter.name}") ( @{parameter.name} =>
+                    }
+
+                    @{operation.method.toLowerCase} (extractRequestContext { ctx =>
+                        @operationHandling(operation)
+                    })
+
+                    @for(_ <- operation.queryParameters){)}
+                    @for(_ <- operation.headerParameters){)}
+                }
+        }
+
+        @for(operation <- operations){
+            @getOperationName(operation)Path ~
+        }
+            pathPrefix("") ( ctx => ctx.complete(fallbackResponse(ctx)) )
+    }
+}

@@ -1,0 +1,27 @@
+@()
+
+object Validation {
+
+    implicit class EitherValidator[T](either: T => Either[ErrorType.InvalidValue, T]) {
+        def combine(that: T => Either[ErrorType.InvalidValue, T]) =
+            either.andThen(_.flatMap(that))
+    }
+
+    def min[T](min: T)(value:T)(implicit num: Numeric[T]): Either[ErrorType.InvalidValue, T] =
+        if (num.compare(value, min) < 0) Left(ErrorType.InvalidValue(s"Number must be greater than $min")) else Right(value)
+
+    def max[T](max: T)(value:T)(implicit num: Numeric[T]): Either[ErrorType.InvalidValue, T] =
+        if (num.compare(value, max) > 0) Left(ErrorType.InvalidValue(s"Number must be lower than $max")) else Right(value)
+
+    def minLength[T<:Seq[_]](minLength: Int)(value:T): Either[ErrorType.InvalidValue, T] =
+        if (value.size > minLength) Right(value) else Left(ErrorType.InvalidValue(s"Array must have more than $minLength elements"))
+
+    def maxLength[T<:Seq[_]](maxLength: Int)(value:T): Either[ErrorType.InvalidValue, T] =
+        if (value.size < maxLength) Right(value) else Left(ErrorType.InvalidValue(s"Array must have less than $maxLength elements"))
+
+    def minLengthString(minLength: Int)(value:String): Either[ErrorType.InvalidValue, String] =
+        if (value.size > minLength) Right(value) else Left(ErrorType.InvalidValue(s"String must be longer than $minLength"))
+
+    def maxLengthString(maxLength: Int)(value:String): Either[ErrorType.InvalidValue, String] =
+        if (value.size < maxLength) Right(value) else Left(ErrorType.InvalidValue(s"String must be shorter than $maxLength"))
+}

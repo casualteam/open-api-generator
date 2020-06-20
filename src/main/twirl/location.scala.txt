@@ -1,0 +1,10 @@
+@()
+
+sealed trait Location
+
+object Location{
+    case object Body extends Location
+    case object Query extends Location
+    case object Header extends Location
+    case object Path extends Location
+}

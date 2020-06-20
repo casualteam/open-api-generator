@@ -1,0 +1,32 @@
+@(
+    models: List[casualteam.openapigenerator.Model],
+    getModelType: (casualteam.openapigenerator.Model,Boolean) => String
+)
+
+import akka.http.scaladsl.model.ResponseEntity
+
+trait ModelXmlEncode[A] { def encodeXml(a: A): ResponseEntity }
+object ModelXmlEncode {
+  def apply[A](implicit sh: ModelXmlEncode[A]): ModelXmlEncode[A] = sh
+  object ops {
+    implicit class ModelXmlEncodeOps[A: ModelXmlEncode](a: A) {
+      def encodeXml = ModelXmlEncode[A].encodeXml(a)
+    }
+  }
+}
+
+trait ModelXmlDecode[A] { def decodeXml(a: akka.http.scaladsl.model.RequestEntity): scala.concurrent.Future[Either[List[FieldError],A]] }
+object ModelXmlDecode {
+  def apply[A](implicit sh: ModelXmlDecode[A]): ModelXmlDecode[A] = sh
+  object ops {
+    implicit class ModelXmlDecodeOps(a: akka.http.scaladsl.model.RequestEntity) {
+      def decodeXml[A: ModelXmlDecode] = ModelXmlDecode[A].decodeXml(a)
+    }
+  }
+}
+
+object ModelXml{
+    //TODO implement me
+    implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T]: ModelXmlEncode[T] = ???
+    implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T]: ModelXmlDecode[T] = ???
+}

@@ -1,0 +1,190 @@
+openapi: 3.0.0
+info:
+  title: Sample API
+  description: >-
+    Optional multiline or single-line description in
+    [CommonMark](http://commonmark.org/help/) or HTML.
+  version: 0.1.9
+servers:
+  - url: 'http://api.example.com/v1'
+    description: 'Optional server description, e.g. Main (production) server'
+  - url: 'http://staging-api.example.com'
+    description: 'Optional server description, e.g. Internal staging server for testing'
+paths:
+  /requestValidation:
+    post:
+      summary: request validation summary
+      description: request validation description
+      operationId: requestValidation
+      parameters:
+        - in: query
+          name: required
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: optional
+          schema:
+            type: string
+        - in: query
+          name: integerWithMinMax
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+        - in: query
+          name: integerInt32WithMinMax
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 20
+        - in: query
+          name: integerInt64WithMinMax
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 20
+        - in: query
+          name: stringWithMinMax
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 20
+        - in: query
+          name: stringDateTime
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: stringBinary
+          schema:
+            type: string
+            format: binary
+        - in: query
+          name: stringPattern
+          schema:
+            type: string
+            pattern: '^\d{3}-\d{2}-\d{4}$'
+        - in: query
+          name: arrayWithMinMax
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 20
+            items:
+              type: string
+        - in: query
+          name: arrayWithStringMinMax
+          schema:
+            type: array
+            items:
+              type: string
+              minLength: 1
+              maxLength: 20
+      requestBody:
+        $ref: '#/components/requestBodies/RequestValidationRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/RequestValidationResponse'
+        default:
+          description: Crud insert default response
+          content:
+            application/json:
+              schema:
+                type: string
+
+components:
+  requestBodies:
+    RequestValidationRequest:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestValidation'
+        application/xml:
+          schema:
+            $ref: '#/components/schemas/RequestValidation'
+      description: Pet object that needs to be added to the store
+      required: true
+  responses:
+    RequestValidationResponse:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RequestValidation'
+        application/xml:
+          schema:
+            $ref: '#/components/schemas/RequestValidation'
+      description: Pet object that needs to be added to the store
+      required: true
+  schemas:
+    RequestValidation:
+      type: object
+      required:
+        - required
+      properties:
+        required:
+          type: string
+        #numberWithMinMax:
+        #  type: number
+        #  minimum: 1
+        #  maximum: 20
+        #numberFloatWithMinMax:
+          #  type: number
+          #  format: float
+          #  minimum: 1
+          #  maximum: 20
+        #numberDoubleWithMinMax:
+          #  type: number
+          #  format: double
+          #  minimum: 1
+          #  maximum: 20
+        integerWithMinMax:
+          type: integer
+          minimum: 1
+          maximum: 20
+        integerInt32WithMinMax:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 20
+        integerInt64WithMinMax:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 20
+        stringWithMinMax:
+          type: string
+          minLength: 1
+          maxLength: 20
+        #stringDate:
+        #  type: string
+        #  format: date
+        stringDateTime:
+          type: string
+          format: date-time
+        #stringPassword:
+          #  type: string
+          #  format: password
+        #stringByte:
+          #  type: string
+          #  format: byte
+        stringBinary:
+          type: string
+          format: binary
+        stringPattern:
+          type: string
+          pattern: '^\d{3}-\d{2}-\d{4}$'
+        arrayWithMinMax:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: string
+        arrayWithStringMinMax:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 20
