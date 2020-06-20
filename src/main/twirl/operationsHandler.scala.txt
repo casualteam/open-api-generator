@@ -30,14 +30,16 @@ import ParameterDecoder.ops._
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
-@modelValidation(model: casualteam.openapigenerator.Model, required: Boolean) = {
-    @defining(getValidationCode(model)){ validation =>
+@modelValidation(parameter: casualteam.openapigenerator.Parameter) = {
+    @defining(getValidationCode(parameter.model)){ validation =>
         @if(validation.nonEmpty){
-         @if(required){
-            .flatMap(@validation)
-         }else{
-            .flatMap(_.map(@validation).map(Some(_)).getOrElse(Right(None)))
-         }
+             @if(parameter.required){
+                ,
+                 validation = @validation
+             }else{
+                ,
+                 validation = _.map(@validation).map(_.map(Some(_))).getOrElse(Right(None))
+             }
         }else{}
     }
 }
@@ -76,8 +78,12 @@ import scala.concurrent.{ExecutionContext, Future}
                 @if(operation.requestBody.isDefined){
                     _@getRequestBodyName(operation.requestBody.get) <- _requestBody
                 }
-                @for(p <- operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters) {
-                    _@{p.name} <-  @{p.name}.decodeString[@getModelType(p.model,p.required)]@modelValidation(p.model,p.required)
+                @for((p,l) <- operation.path.flatMap(_.right.toOption).map((_,"Location.Path")) ++ operation.queryParameters.map((_,"Location.Query")) ++ operation.headerParameters.map((_,"Location.Header"))) {
+                    _@{p.name} <-  @{p.name}.decodeString[@getModelType(p.model,p.required)](
+                    name = "@{p.name}",
+                    location = @l
+                    @modelValidation(p)
+                    )
                 }
             } yield {
                 @defining(operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters){ parameters =>
@@ -117,12 +123,9 @@ import scala.concurrent.{ExecutionContext, Future}
                             }
                         }
                     } else {
-                        val respBody = Right(HttpEntity.Empty)
+                        val respBody = HttpEntity.Empty
                     }
-                    respBody.fold(
-                        error => failWith(new Exception(s"Fail on request ${ctx.request}, error=$error")),
-                        success => complete(HttpResponse(_resp.code,Nil, success))
-                    )
+                    complete(HttpResponse(_resp.code,Nil, respBody))
             }
         }
     }

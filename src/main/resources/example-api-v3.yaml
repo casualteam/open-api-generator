@@ -11,16 +11,83 @@ servers:
   - url: 'http://staging-api.example.com'
     description: 'Optional server description, e.g. Internal staging server for testing'
 paths:
-  /crud:
+  /requestValidation:
     post:
-      summary: Crud insert summary
-      description: Crud insert description
-      operationId: crudInsert
+      summary: request validation summary
+      description: request validation description
+      operationId: requestValidation
+      parameters:
+        - in: query
+          name: required
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: optional
+          schema:
+            type: string
+        - in: query
+          name: integerWithMinMax
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+        - in: query
+          name: integerInt32WithMinMax
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 20
+        - in: query
+          name: integerInt64WithMinMax
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 20
+        - in: query
+          name: stringWithMinMax
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 20
+        - in: query
+          name: stringDateTime
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: stringBinary
+          schema:
+            type: string
+            format: binary
+        - in: query
+          name: stringPattern
+          schema:
+            type: string
+            pattern: '^\d{3}-\d{2}-\d{4}$'
+        - in: query
+          name: arrayWithMinMax
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 20
+            items:
+              type: string
+        - in: query
+          name: arrayWithStringMinMax
+          schema:
+            type: array
+            items:
+              type: string
+              minLength: 1
+              maxLength: 20
       requestBody:
-        $ref: '#/components/requestBodies/CrudInsertRequest'
+        $ref: '#/components/requestBodies/RequestValidationRequest'
       responses:
         '200':
-          $ref: '#/components/responses/CrudInsertResponse'
+          $ref: '#/components/responses/RequestValidationResponse'
         default:
           description: Crud insert default response
           content:
@@ -30,29 +97,29 @@ paths:
 
 components:
   requestBodies:
-    CrudInsertRequest:
+    RequestValidationRequest:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/CrudInsert'
+            $ref: '#/components/schemas/RequestValidation'
         application/xml:
           schema:
-            $ref: '#/components/schemas/CrudInsert'
+            $ref: '#/components/schemas/RequestValidation'
       description: Pet object that needs to be added to the store
       required: true
   responses:
-    CrudInsertResponse:
+    RequestValidationResponse:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/CrudInsert'
+            $ref: '#/components/schemas/RequestValidation'
         application/xml:
           schema:
-            $ref: '#/components/schemas/CrudInsert'
+            $ref: '#/components/schemas/RequestValidation'
       description: Pet object that needs to be added to the store
       required: true
   schemas:
-    CrudInsert:
+    RequestValidation:
       type: object
       required:
         - required

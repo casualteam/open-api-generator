@@ -7,6 +7,7 @@ import java.nio.charset.Charset
 
 import Validation._
 import akka.http.scaladsl.model.{RequestEntity, ResponseEntity}
+import akka.http.scaladsl.util.FastFuture
 import akka.stream.Materializer
 import io.circe.syntax._
 import io.circe.parser._
@@ -15,7 +16,7 @@ import io.circe.{CursorOp, Decoder, Encoder, JsonObject}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
-trait ModelJsonEncode[A] { def encodeJson(a: A): Either[Error,ResponseEntity] }
+trait ModelJsonEncode[A] { def encodeJson(a: A): ResponseEntity }
 object ModelJsonEncode {
   def apply[A](implicit sh: ModelJsonEncode[A]): ModelJsonEncode[A] = sh
 
@@ -33,7 +34,7 @@ trait ModelJsonDecode[A] {
     requestTimeout: FiniteDuration,
     requestMaxBytes: Long,
     defaultCharset: Charset
-  ): Future[Either[Error, A]]
+  ): Future[Either[List[FieldError], A]]
 }
 object ModelJsonDecode {
   def apply[A](implicit sh: ModelJsonDecode[A]): ModelJsonDecode[A] = sh
@@ -50,8 +51,8 @@ object ModelJsonDecode {
 
 trait ModelJson {
 
-  private def validationDecoder[T](validate: T => Either[Error,T] = (t:T) => Right(t))(implicit d: Decoder[T]) =
-    d.emap(value => validate(value).left.map(_.value))
+  private def validationDecoder[T](validate: T => Either[ErrorType,T] = (t:T) => Right(t))(implicit d: Decoder[T]) =
+    d.emap(value => validate(value).left.map(ErrorType.encode))
 
   @{models
     .collect {
@@ -62,8 +63,8 @@ trait ModelJson {
 
   implicit def m@{scala.util.Random.alphanumeric.take(10).mkString}[T](implicit encoder:Encoder[T]) =
       new ModelJsonEncode[T]{
-          override def encodeJson(a: T): Either[Error, ResponseEntity] = {
-              Right(encoder(a).noSpaces)
+          override def encodeJson(a: T): ResponseEntity = {
+              encoder(a).noSpaces
           }
       }
 
@@ -74,16 +75,41 @@ trait ModelJson {
             timeout: FiniteDuration,
             maxBytes: Long,
             defaultCharset: Charset
-        ): Future[Either[Error, T]] = {
-            requestEntity.toStrict(timeout, maxBytes)
-                .map(_.data.decodeString(requestEntity.contentType.charsetOption.map(_.nioCharset).getOrElse(defaultCharset)))
-                .map { in =>
-                    parse(in)
-                        .left.map(f => Error(s"Invalid json format ${f.message}"))
-                        .flatMap(_.as[T].left.map { f =>
-                            Error(s"location=${CursorOp.opsToPath(f.history)}, message=${f.message}")
-                        })
-                }
+        ): Future[Either[List[FieldError], T]] = {
+            requestEntity
+            	.contentLengthOption
+            	.map { contentLength =>
+            		if (contentLength > maxBytes)
+            			FastFuture.successful(Left(List(FieldError(
+            				name = ".",
+            				location = Location.Body,
+            				errorType = ErrorType.InvalidValue(s"Request of size $contentLength was longer than the maximum of $maxBytes")
+            			))))
+            		else
+            			requestEntity.toStrict(timeout, maxBytes).map(Right(_))
+            	}
+            	.getOrElse(requestEntity.toStrict(timeout).map(Right(_)))
+            	.map { request =>
+            		request
+            			.map(_.data.decodeString(requestEntity.contentType.charsetOption.map(_.nioCharset).getOrElse(defaultCharset)))
+            			.flatMap(data => parse(data).left.map { error =>
+            				List(FieldError(
+            					name = ".",
+            					location = Location.Body,
+            					errorType = ErrorType.InvalidValue(s"Not a json: ${error.message}")
+            				))
+            			})
+            			.flatMap(_.as[T].left.map { f =>
+            				List(FieldError(
+            					name = CursorOp.opsToPath(f.history),
+            					location = Location.Body,
+            					errorType =
+            						ErrorType.decode(f.message)
+            							.orElse(ErrorType.fromCirceMessage(f.message))
+            							.getOrElse(ErrorType.Unknown)
+            				))
+            			})
+            	}
         }
     }
 }

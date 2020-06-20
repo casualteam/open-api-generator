@@ -1,0 +1,14 @@
+@()
+
+/**
+ * Represents an error on a field.
+ *
+ * @@param name The name of the field.
+ * @@param location The location of the field.
+ * @@param errorType The type of the error.
+ */
+final case class FieldError(
+    name: String,
+    location: Location,
+    errorType: ErrorType
+)

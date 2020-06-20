@@ -10,7 +10,7 @@
 trait Operations {
     import Operations._
     @for(operation <- operations) {
-        def @getOperationName(operation) (in: Either[Error,@getOperationName(operation)Request]): scala.concurrent.Future[@getOperationName(operation)Response]
+        def @getOperationName(operation) (in: Either[List[FieldError],@getOperationName(operation)Request]): scala.concurrent.Future[@getOperationName(operation)Response]
     }
 }
 

@@ -1,3 +1,0 @@
-@()
-
-case class Error(value: String)

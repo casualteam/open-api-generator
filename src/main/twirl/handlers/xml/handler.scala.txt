@@ -3,7 +3,9 @@
     getModelType: (casualteam.openapigenerator.Model,Boolean) => String
 )
 
-trait ModelXmlEncode[A] { def encodeXml(a: A): Either[Error,akka.http.scaladsl.model.ResponseEntity] }
+import akka.http.scaladsl.model.ResponseEntity
+
+trait ModelXmlEncode[A] { def encodeXml(a: A): ResponseEntity }
 object ModelXmlEncode {
   def apply[A](implicit sh: ModelXmlEncode[A]): ModelXmlEncode[A] = sh
   object ops {
@@ -13,7 +15,7 @@ object ModelXmlEncode {
   }
 }
 
-trait ModelXmlDecode[A] { def decodeXml(a: akka.http.scaladsl.model.RequestEntity): scala.concurrent.Future[Either[Error,A]] }
+trait ModelXmlDecode[A] { def decodeXml(a: akka.http.scaladsl.model.RequestEntity): scala.concurrent.Future[Either[List[FieldError],A]] }
 object ModelXmlDecode {
   def apply[A](implicit sh: ModelXmlDecode[A]): ModelXmlDecode[A] = sh
   object ops {

@@ -168,7 +168,9 @@ object Main extends App with ApiProcess {
     }
     val openAPI: OpenAPI = new OpenAPIV3Parser().read(apiPath, Nil.asJava, parseOptions)
     val (_models, _responses, _requestBodies, _operations) = process(openAPI)
-    val errorFile = (directory / "Error.scala").clear()
+    val errorTypeFile = (directory / "ErrorType.scala").clear()
+    val locationFile = (directory / "Location.scala").clear()
+    val fieldErrorFile = (directory / "FieldError.scala").clear()
     val operationsFile = (directory / "Operations.scala").clear()
     val operationsHandlerFile = (directory / "OperationsHandler.scala").clear()
     val modelsFile = (directory / "Models.scala").clear()
@@ -200,7 +202,9 @@ object Main extends App with ApiProcess {
       .foreach(responsesFile.appendLine)
     //handlers
     validationFile.appendLine(cleanTemplate(txt.validation()))
-    errorFile.appendLine(cleanTemplate(txt.error()))
+    errorTypeFile.appendLine(cleanTemplate(txt.errorType()))
+    fieldErrorFile.appendLine(cleanTemplate(txt.fieldError()))
+    locationFile.appendLine(cleanTemplate(txt.location()))
     parameterHandlersFile.appendLine(cleanTemplate(handlers.txt.parameter()))
     jsonHandlersFile.appendLine(cleanTemplate(handlers.json.txt.handler(_models, getModelType, getValidationCode)))
     xmlHandlersFile.appendLine(cleanTemplate(handlers.xml.txt.handler(_models, getModelType)))
