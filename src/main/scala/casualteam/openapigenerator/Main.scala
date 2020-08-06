@@ -175,7 +175,6 @@ object Main extends App with ApiProcess {
     val operationsHandlerFile = (directory / "OperationsHandler.scala").clear()
     val modelsFile = (directory / "Models.scala").clear()
     val requestsFile = (directory / "Requests.scala").clear()
-    val responsesFile = (directory / "Responses.scala").clear()
     val parameterHandlersFile = (directory / "ParameterDecoder.scala").clear()
     val jsonHandlersFile = (directory / "JsonHandlers.scala").clear()
     val xmlHandlersFile = (directory / "XmlHandlers.scala").clear()
@@ -193,13 +192,6 @@ object Main extends App with ApiProcess {
     _requestBodies
       .map(requestBody => requests.txt.requestBody(requestBody, getRequestBodyType, getMediaTypeModelType))
       .foreach(s => requestsFile.appendLine(cleanTemplate(s)))
-    //responses
-    _responses
-      .collect {
-        case r: Response.BaseResponse => responses.txt.response(r, getResponseType, getMediaTypeModelType, getHeaderType)
-      }
-      .map(inOneLine)
-      .foreach(responsesFile.appendLine)
     //handlers
     validationFile.appendLine(cleanTemplate(txt.validation()))
     errorTypeFile.appendLine(cleanTemplate(txt.errorType()))
@@ -209,10 +201,17 @@ object Main extends App with ApiProcess {
     jsonHandlersFile.appendLine(cleanTemplate(handlers.json.txt.handler(_models, getModelType, getValidationCode)))
     xmlHandlersFile.appendLine(cleanTemplate(handlers.xml.txt.handler(_models, getModelType)))
     //operations
-    operationsFile.appendLine(cleanTemplate(operation.txt.interface(_operations, getOperationName, getResponseType, getModelType, getRequestBodyName, getRequestBodyTypeParam(_requestBodies))))
+    operationsFile.appendLine(cleanTemplate(operation.txt.operations(
+      operations = _operations,
+      getOperationName = getOperationName,
+      getMediaTypeModelType = getMediaTypeModelType,
+      getActualResponse = getActualResponse(_responses),
+      getModelType = getModelType,
+      getRequestBodyName = getRequestBodyName,
+      getRequestBodyTypeParam = getRequestBodyTypeParam(_requestBodies))))
     //operations handler
     operationsHandlerFile.appendLine(
-      cleanTemplate(txt.operationsHandler(
+      cleanTemplate(operation.txt.operationsHandler(
         _operations,
         getOperationName,
         getActualResponse(_responses),

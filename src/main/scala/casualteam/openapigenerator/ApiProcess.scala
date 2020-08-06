@@ -21,15 +21,15 @@ trait ApiProcess {
         case (contentType, mediaType) =>
           val newComputeName = computedName :+ contentType
           val mediaTypeModel = contentType match {
-            case "application/json" =>
+            case s"application/json$other" =>
               MediaTypeModel.ApplicationJson(model = getModel(newComputeName, None, mediaType.getSchema))
-            case "application/xml" =>
+            case s"application/xml$other" =>
               MediaTypeModel.ApplicationXml(model = getModel(newComputeName, None, mediaType.getSchema))
-            case "application/x-www-form-urlencoded" =>
+            case s"application/x-www-form-urlencoded$other" =>
               ApplicationForm(model = getModel(newComputeName, None, mediaType.getSchema))
-            case "multipart/form-data" =>
+            case s"multipart/form-data$other" =>
               MultipartForm(model = getModel(newComputeName, None, mediaType.getSchema))
-            case "application/octet-stream" =>
+            case s"application/octet-stream$other" =>
               OctetStream(model = getModel(newComputeName, None, mediaType.getSchema))
             case _ =>
               throw new IllegalArgumentException(s"Unknown content type $contentType in content $content")

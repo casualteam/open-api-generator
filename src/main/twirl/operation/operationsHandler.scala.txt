@@ -87,7 +87,7 @@ import scala.concurrent.{ExecutionContext, Future}
                 }
             } yield {
                 @defining(operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters){ parameters =>
-                    Operations.@getOperationName(operation)Request(
+                    Operations.@{getOperationName(operation)}.Request(
                         @if(operation.requestBody.isDefined){
                             @getRequestBodyName(operation.requestBody.get) = _@getRequestBodyName(operation.requestBody.get) @if(parameters.nonEmpty){,}
                         }
@@ -99,36 +99,42 @@ import scala.concurrent.{ExecutionContext, Future}
             }
         }
     } else {
-        val request = Future.successful(Right(Operations.@getOperationName(operation)Request()))
+        val request = Future.successful(Right(Operations.@{getOperationName(operation)}.Request()))
     }
-    onSuccess(request.flatMap(operations.@{getOperationName(operation)})){ resp =>
+
+    @defining(for {
+        (statusCode,response) <- operation.responses.toList
+        baseResponse = getActualResponse(response)
+        (contentType,model) <- baseResponse.contentTypeModels
+    } yield (statusCode,baseResponse,contentType,model)){ stuff =>
+
         val mediaTypeNegotiatorResponse = new MediaTypeNegotiator(ctx.request.headers)
-        resp match {
-            @for((statusCode,response) <- operation.responses.iterator) {
-                @if(statusCode == "default"){
-                    case _resp:Operations.@getOperationName(operation)Response.default
-                } else {
-                    case _resp:Operations.@getOperationName(operation)Response.`@statusCode`
-                }
-                =>
-                    @if(getActualResponse(response).contentTypeModels.nonEmpty){
-                        val respBody = mediaTypeNegotiatorResponse match {
-                            @for((contentType,mediaTypeModel) <- getActualResponse(response).contentTypeModels.iterator){
-                                case m if m.isAccepted(MediaType.parse("@contentType").right.get) =>
-                                    _resp.in.`@contentType`.@getMediaTypeModelEncoder(mediaTypeModel)
-                            }
-                            @for((contentType,mediaTypeModel) <- getActualResponse(response).contentTypeModels.toList.headOption){
-                                case _ =>
-                                    _resp.in.`@contentType`.@getMediaTypeModelEncoder(mediaTypeModel)
+        val result = mediaTypeNegotiatorResponse match {
+            @for((contentType,i) <- stuff.map(_._3).distinct.zipWithIndex.toList.reverse){
+                case m if m.isAccepted(MediaType.parse("@contentType").right.get) =>
+                    request
+                        .flatMap(operations.@{getOperationName(operation)}.`@contentType`)
+                        .map {
+                            @defining(stuff.filter(_._3 == contentType).map(s => (s._1,s._4)).distinct){ s=>
+                                @for((statusCode,model) <- s){
+                                    @if(statusCode == "default"){
+                                        case res: Operations.@{getOperationName(operation)}.Response.`@contentType`.@statusCode =>
+                                    } else {
+                                        case res: Operations.@{getOperationName(operation)}.Response.`@contentType`.`@statusCode` =>
+                                    }
+                                        HttpResponse(
+                                            status = res.code,
+                                            headers = Nil,
+                                            entity = res.in.encodeXml
+                                        )
+                                }
                             }
                         }
-                    } else {
-                        val respBody = HttpEntity.Empty
-                    }
-                    complete(HttpResponse(_resp.code,Nil, respBody))
             }
         }
+        onSuccess(result)(complete(_))
     }
+
 }
 
 object OperationsHandler {

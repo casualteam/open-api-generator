@@ -31,17 +31,21 @@ implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString}:Encoder[@
 
 implicit lazy val m@{scala.util.Random.alphanumeric.take(10).mkString}:Decoder[@getModelType(model, true)] =
     Decoder.instance[@getModelType(model, true)] { c =>
-        for {
-            @for((f,i) <- model.fields.zipWithIndex) {
-                @defining(modelDecoder(f._2.model,f._2.required)) { validations =>
-                    f@i <- c.downField("@{f._1}").as[@getModelType(f._2.model,f._2.required)]@validations
-                }
-            }
-        } yield {
-            @getModelType(model, true) (
+        @if(model.fields.nonEmpty) {
+            for {
                 @for((f,i) <- model.fields.zipWithIndex) {
-                  `@{f._1}` = f@i @if(i < model.fields.size -1){,}
+                    @defining(modelDecoder(f._2.model,f._2.required)) { validations =>
+                        f@i <- c.downField("@{f._1}").as[@getModelType(f._2.model,f._2.required)]@validations
+                    }
                 }
-            )
+            } yield {
+                @getModelType(model, true) (
+                    @for((f,i) <- model.fields.zipWithIndex) {
+                      `@{f._1}` = f@i @if(i < model.fields.size -1){,}
+                    }
+                )
+            }
+        } else {
+            Right(@getModelType(model, true) ())
         }
     }

@@ -94,6 +94,26 @@ paths:
             application/json:
               schema:
                 type: string
+  /versionedRequest:
+    post:
+      operationId: versionedRequest
+      responses:
+        200:
+          content:
+            application/json;version=1:
+              schema:
+                $ref: '#/components/schemas/Model1'
+            application/json;version=2:
+              schema:
+                $ref: '#/components/schemas/Model2'
+        300:
+          content:
+            application/json;version=1:
+              schema:
+                $ref: '#/components/schemas/Model2'
+            application/json;version=3:
+              schema:
+                $ref: '#/components/schemas/Model3'
 
 components:
   requestBodies:
@@ -188,3 +208,9 @@ components:
             type: string
             minLength: 1
             maxLength: 20
+    Model1:
+      type: object
+    Model2:
+      type: object
+    Model3:
+      type: object

@@ -1,0 +1,69 @@
+@(
+    operations: List[casualteam.openapigenerator.Operation],
+    getOperationName: casualteam.openapigenerator.Operation => String,
+    getActualResponse: casualteam.openapigenerator.Response => casualteam.openapigenerator.Response.BaseResponse,
+    getMediaTypeModelType: casualteam.openapigenerator.MediaTypeModel => String,
+    getModelType: (casualteam.openapigenerator.Model, Boolean) => String,
+    getRequestBodyName: casualteam.openapigenerator.RequestBody => String,
+    getRequestBodyTypeParam: casualteam.openapigenerator.RequestBody => String
+ )
+
+case class Operations(
+    @for((operation,i) <- operations.zipWithIndex) {
+        @getOperationName(operation): Operations.@{getOperationName(operation)}.OperationByType @if(i < operations.size -1){,}
+    }
+)
+
+object Operations {
+    @for(operation <- operations) {
+
+        object @{getOperationName(operation)} {
+
+            @defining(for {
+                (statusCode,response) <- operation.responses.toList
+                baseResponse = getActualResponse(response)
+                (contentType,model) <- baseResponse.contentTypeModels
+            } yield (statusCode,baseResponse,contentType,model)){ stuff =>
+
+                case class OperationByType (
+                    @for((contentType,i) <- stuff.map(_._3).distinct.zipWithIndex.toList.reverse){
+                        `@contentType`: Either[List[FieldError],Request] => scala.concurrent.Future[Response.`@contentType`] @if(i > 0){,}
+                    }
+                )
+
+                object Response {
+                    @for(contentType <- stuff.map(_._3).distinct){
+
+                        sealed trait `@contentType` { def code:Int }
+                        object `@contentType` {
+                            @defining(stuff.filter(_._3 == contentType).map(s => (s._1,s._4)).distinct){ s=>
+                                @for((statusCode,model) <- s){
+                                    @if(scala.util.Try(Integer.decode(statusCode)).isSuccess){
+                                        case class `@statusCode` (in: @getMediaTypeModelType(model) ) extends `@contentType` { val code: Int = @statusCode }
+                                    } else if(statusCode == "default"){
+                                        case class default (in: @getMediaTypeModelType(model), code: Int ) extends `@contentType`
+                                    } else {
+                                        case class `@statusCode` (in: @getMediaTypeModelType(model), code: Int  ) extends `@contentType`
+                                    }
+                                }
+                            }
+                        }
+
+                    }
+                }
+            }
+
+            @defining(operation.path.flatMap(_.right.toOption) ++ operation.queryParameters ++ operation.headerParameters){ parameters =>
+                case class Request(
+                    @if(operation.requestBody.isDefined){
+                        @getRequestBodyName(operation.requestBody.get) : @getRequestBodyTypeParam(operation.requestBody.get)@if(parameters.nonEmpty){,}
+                    }
+                    @for((p,i) <- parameters.zipWithIndex) {
+                      @{p.name} : @getModelType(p.model,p.required) @if(i < parameters.size -1){,}
+                    }
+                )
+            }
+
+        }
+    }
+}
