@@ -28,7 +28,7 @@ import ParameterDecoder._
 import ParameterDecoder.ops._
 
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 @modelValidation(parameter: casualteam.openapigenerator.Parameter) = {
     @defining(getValidationCode(parameter.model)){ validation =>
@@ -47,30 +47,12 @@ import scala.concurrent.{ExecutionContext, Future}
 @operationHandling(operation: casualteam.openapigenerator.Operation) = {
     @if(operation.hasInput) {
         @if(operation.requestBody.isDefined){
-            val requestBody = ctx.request.entity.getContentType match {
-                @defining(getActualRequestBody(operation.requestBody.get)){ requestBody =>
-                    @for((contentType,mediaTypeModel) <- requestBody.contentTypeModels.iterator){
-                        case m if m == ContentType.parse("@contentType").right.get =>
-                            ctx.request.entity.@getMediaTypeModelDecoder(mediaTypeModel,requestBody.required)
-                            @if(requestBody.required) {
-                                .map(_.map(@getRequestBodyType(requestBody).`@contentType`))
-                            } else {
-                                .map(_.map(_.map(@getRequestBodyType(requestBody).`@contentType`)))
-                            }
-                    }
-                    @for((contentType,mediaTypeModel) <- requestBody.contentTypeModels.toList.headOption){
-                        case _ =>
-                            ctx.request.entity.@getMediaTypeModelDecoder(mediaTypeModel,requestBody.required)
-                            @if(requestBody.required) {
-                                .map(_.map(@getRequestBodyType(requestBody).`@contentType`))
-                            } else {
-                                .map(_.map(_.map(@getRequestBodyType(requestBody).`@contentType`)))
-                            }
-                    }
-                }
-            }
+            val requestBody = requestBodies
+                .get(ctx.request.entity.contentType)
+                .map(f => f(ctx))
+                .getOrElse(notAcceptedContentType)
         } else {
-            val requestBody = Future.successful(())
+            val requestBody = akka.http.scaladsl.util.FastFuture.successful(())
         }
 
         val request = requestBody.map{ _requestBody =>
@@ -99,21 +81,40 @@ import scala.concurrent.{ExecutionContext, Future}
             }
         }
     } else {
-        val request = Future.successful(Right(Operations.@{getOperationName(operation)}.Request()))
+        val request = akka.http.scaladsl.util.FastFuture.successful(Right(Operations.@{getOperationName(operation)}.Request()))
     }
 
-    @defining(for {
-        (statusCode,response) <- operation.responses.toList
-        baseResponse = getActualResponse(response)
-        (contentType,model) <- baseResponse.contentTypeModels
-    } yield (statusCode,baseResponse,contentType,model)){ stuff =>
+    val mediaTypeNegotiatorResponse = new MediaTypeNegotiator(ctx.request.headers)
+    val handler = handlers
+      .maxBy{ case (mediaType, _) => mediaTypeNegotiatorResponse.qValueFor(mediaType) }
+      ._2
+    onSuccess(request.flatMap(handler))(complete(_))
 
-        val mediaTypeNegotiatorResponse = new MediaTypeNegotiator(ctx.request.headers)
-        val result = mediaTypeNegotiatorResponse match {
+}
+
+object OperationsHandler {
+
+    private val notAcceptedContentType =
+        akka.http.scaladsl.util.FastFuture.successful(Left(List(FieldError(
+            name = ".",
+            location = Location.Body,
+            errorType = ErrorType.InvalidValue("Content-Type not accepted")
+        ))))
+
+
+    @for(operation <- operations){
+        @defining(for {
+                (statusCode,response) <- operation.responses.toList
+                baseResponse = getActualResponse(response)
+                (contentType,model) <- baseResponse.contentTypeModels
+        } yield (statusCode,baseResponse,contentType,model)){ stuff =>
+
             @for((contentType,i) <- stuff.map(_._3).distinct.zipWithIndex.toList.reverse){
-                case m if m.isAccepted(MediaType.parse("@contentType").right.get) =>
-                    request
-                        .flatMap(operations.@{getOperationName(operation)}.`@contentType`)
+                private def `@{getOperationName(operation)}@{contentType}Handler`(
+                    operation: Either[List[FieldError], Operations.@{getOperationName(operation)}.Request] => scala.concurrent.Future[Operations.@{getOperationName(operation)}.Response.`@contentType`],
+                    request: Either[List[FieldError], Operations.@{getOperationName(operation)}.Request]
+                )(implicit ex: ExecutionContext) =
+                    operation(request)
                         .map {
                             @defining(stuff.filter(_._3 == contentType).map(s => (s._1,s._4)).distinct){ s=>
                                 @for((statusCode,model) <- s){
@@ -125,30 +126,50 @@ import scala.concurrent.{ExecutionContext, Future}
                                         HttpResponse(
                                             status = res.code,
                                             headers = Nil,
-                                            entity = res.in.encodeXml
+                                            entity = res.in.@getMediaTypeModelEncoder(model)
                                         )
                                 }
                             }
                         }
             }
-        }
-        onSuccess(result)(complete(_))
-    }
 
-}
+            private def @getOperationName(operation)Path(
+                operation:Operations.@{getOperationName(operation)}.OperationByType,
+                requestTimeout: FiniteDuration,
+                requestMaxBytes: Long,
+                defaultCharset: Charset
+            )(implicit ex: ExecutionContext, materializer: Materializer) = {
+                val handlers = List(
+                    @for((contentType,i) <- stuff.map(_._3).distinct.zipWithIndex.toList.reverse){
+                        (
+                            MediaType.parse("@contentType").right.get,
+                            `@{getOperationName(operation)}@{contentType}Handler`(operation.`@contentType`, _)
+                        )
+                        @if(i > 0){,}
+                    }
+                )
 
-object OperationsHandler {
+                val requestBodies = Map(
+                    @if(operation.requestBody.isDefined){
+                        @defining(getActualRequestBody(operation.requestBody.get)){ requestBody =>
+                            @for(((contentType,mediaTypeModel),i) <- requestBody.contentTypeModels.toList.zipWithIndex.toList.reverse){
+                                (
+                                    ContentType.parse("@contentType").right.get,
+                                    (ctx:akka.http.scaladsl.server.RequestContext) => {
+                                        ctx.request.entity.@getMediaTypeModelDecoder(mediaTypeModel,requestBody.required)
+                                        @if(requestBody.required) {
+                                            .map(_.map(@getRequestBodyType(requestBody).`@contentType`))
+                                        } else {
+                                            .map(_.map(_.map(@getRequestBodyType(requestBody).`@contentType`)))
+                                        }
+                                    }
+                                )
+                                @if(i > 0){,}
+                            }
+                        }
+                    }
+                )
 
-    def getOperationsHandler(
-        operations:Operations,
-        fallbackResponse: RequestContext => HttpResponse,
-        requestTimeout: FiniteDuration,
-        requestMaxBytes: Long,
-        defaultCharset: Charset
-    )(implicit ex:ExecutionContext, materializer: Materializer) = {
-
-        @for(operation <- operations){
-            val @getOperationName(operation)Path =
                 path (
                     @{operation.path
                         .map(_.fold(
@@ -178,10 +199,20 @@ object OperationsHandler {
                     @for(_ <- operation.queryParameters){)}
                     @for(_ <- operation.headerParameters){)}
                 }
+            }
         }
+    }
+
+    def getOperationsHandler(
+        operations:Operations,
+        fallbackResponse: RequestContext => HttpResponse,
+        requestTimeout: FiniteDuration,
+        requestMaxBytes: Long,
+        defaultCharset: Charset
+    )(implicit ex:ExecutionContext, materializer: Materializer) = {
 
         @for(operation <- operations){
-            @getOperationName(operation)Path ~
+            @getOperationName(operation)Path(operations.@getOperationName(operation), requestTimeout, requestMaxBytes, defaultCharset) ~
         }
             pathPrefix("") ( ctx => ctx.complete(fallbackResponse(ctx)) )
     }
